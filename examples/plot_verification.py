@@ -91,36 +91,52 @@ def _marker_for_config(yaml_path: Path) -> tuple[str, float, float, float]:
 
 
 def plot_jparc_e10_marker() -> Path:
-  fig, ax = plt.subplots(figsize=(7.5, 5.0))
+  fig, ax = plt.subplots(figsize=(8.5, 5.5))
   curves = {
-    "pion-": _curve("pion-", "Be"),
-    "kaon-": _curve("kaon-", "Be"),
+    "pion-": (_curve("pion-", "Be"), r"$\pi^{-}$", "C0"),
+    "kaon-": (_curve("kaon-", "Be"), r"$K^{-}$", "C1"),
   }
-  for name, (t, s) in curves.items():
-    label = {"pion-": r"$\pi^{-}$", "kaon-": r"$K^{-}$"}[name]
-    ax.loglog(t, s, "-", label=label)
+  for _, ((t, s), label, color) in curves.items():
+    ax.loglog(t, s, "-", color=color, label=label)
 
-  for cfg_name, marker in [
-    ("jparc_e10_pim.yaml", "o"),
-    ("jparc_e10_km.yaml", "s"),
-  ]:
+  # Place markers with leader-line annotations into the empty upper-left
+  # corner so the labels don't obscure the curves near MIP.
+  marker_specs = [
+    ("jparc_e10_pim.yaml", "o", "C0", (0.05, 0.92)),
+    ("jparc_e10_km.yaml", "s", "C1", (0.05, 0.75)),
+  ]
+  for cfg_name, marker, color, (x_ax, y_ax) in marker_specs:
     name, t, s, de = _marker_for_config(CFG_DIR / cfg_name)
     ax.loglog(
-      t, s, marker, markersize=10, markeredgewidth=1.5,
-      markerfacecolor="white",
-      label=(
-        f"{name} @ J-PARC E10  (T={t / 1000.0:.3f} GeV, "
-        f"dE/dx={s:.3f},  $\\Delta E\\approx${de:.2f} MeV)"
-      ),
+      t, s, marker,
+      markersize=11, markeredgewidth=1.8,
+      markeredgecolor=color, markerfacecolor="white",
+    )
+    text = (
+      f"{name} @ J-PARC E10\n"
+      f"  T = {t / 1000.0:.3f} GeV\n"
+      f"  dE/dx = {s:.3f} MeV cm$^2$/g\n"
+      f"  $\\Delta E\\approx${de:.2f} MeV"
+    )
+    ax.annotate(
+      text,
+      xy=(t, s),
+      xycoords="data",
+      xytext=(x_ax, y_ax),
+      textcoords="axes fraction",
+      fontsize=9,
+      ha="left", va="top",
+      bbox={"boxstyle": "round,pad=0.35", "fc": "white",
+            "ec": color, "lw": 1.0, "alpha": 0.9},
+      arrowprops={"arrowstyle": "->", "color": color, "lw": 1.0,
+                  "connectionstyle": "arc3,rad=-0.15"},
     )
 
-  # Target band: 9Be 3.5 g/cm^2 grammage line is the same as multiplying
-  # the y-axis value by 3.5 to get mean dE.
   ax.set_xlabel("kinetic energy [MeV]")
   ax.set_ylabel(r"mass stopping power $-dE/(\rho\,dx)$ [MeV cm$^2$/g]")
   ax.set_title(r"J-PARC E10 working points on 9Be, 3.5 g/cm$^2$")
   ax.grid(True, which="both", linestyle=":", alpha=0.6)
-  ax.legend(fontsize=9, loc="lower left")
+  ax.legend(fontsize=10, loc="upper right")
   fig.tight_layout()
   out = FIG_DIR / "jparc_e10_marker.png"
   fig.savefig(out, dpi=150)
