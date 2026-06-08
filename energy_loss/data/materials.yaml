@@ -25,9 +25,14 @@ materials:
   # ---------------- elemental targets ----------------
   Be:
     element: Be
-    aliases: [beryllium]
+    isotope: 9               # 9Be(Enriched). Be is mononuclidic in nature
+                             # (100% 9Be), so this matches natural Be too,
+                             # but make the isotope explicit for clarity.
+    aliases: [beryllium, 9Be, Be9]
     mean_excitation_energy_ev: 63.7
-    reference: "Z, A, density from periodictable; I from NIST PSTAR / PDG"
+    reference: |
+      Z and 9Be isotopic mass from periodictable; density from
+      periodictable (natural Be, 1.848 g/cm^3); I from NIST PSTAR / PDG.
 
   carbon:
     element: C

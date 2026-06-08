@@ -28,11 +28,18 @@ def test_alias_lookup_for_carbon():
   assert via_alias is direct
 
 
-def test_be_uses_periodictable_zoa_and_density():
+def test_be_uses_periodictable_9be_isotope():
+  # Be is configured as 9Be(Enriched): Z/A from the isotope mass.
   be = get_material("Be")
-  el = pt.elements.symbol("Be")
-  assert math.isclose(be.z_over_a, el.number / el.mass, rel_tol=1e-12)
-  assert math.isclose(be.density_g_per_cm3, el.density, rel_tol=1e-12)
+  iso = pt.elements.symbol("Be")[9]
+  assert math.isclose(be.z_over_a, iso.element.number / iso.mass, rel_tol=1e-12)
+  # Density is the natural Be density (Be is mononuclidic in nature).
+  assert math.isclose(be.density_g_per_cm3, 1.848, rel_tol=1e-3)
+
+
+def test_9be_alias_resolves_to_same_material():
+  assert get_material("9Be") is get_material("Be")
+  assert get_material("Be9") is get_material("Be")
 
 
 def test_carbon_uses_periodictable_density():

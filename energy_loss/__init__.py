@@ -12,21 +12,42 @@ Internal unit convention (used everywhere unless stated otherwise):
 Public API re-exports the most commonly used objects.
 """
 
+from energy_loss.config import (
+  Beam,
+  Config,
+  Target,
+  compute_linear_stopping_power,
+  compute_mass_stopping_power,
+  load_config,
+)
 from energy_loss.materials import (
   Material,
   get_material,
   list_materials,
   load_materials_from_yaml,
 )
-from energy_loss.particles import Particle, get_particle
+from energy_loss.particles import (
+  Particle,
+  get_particle,
+  list_particles,
+  register_particle,
+)
 
 __all__ = [
+  "Beam",
+  "Config",
   "Material",
   "Particle",
+  "Target",
+  "compute_linear_stopping_power",
+  "compute_mass_stopping_power",
   "get_material",
   "get_particle",
   "list_materials",
+  "list_particles",
+  "load_config",
   "load_materials_from_yaml",
+  "register_particle",
 ]
 
 __version__ = "0.1.0"

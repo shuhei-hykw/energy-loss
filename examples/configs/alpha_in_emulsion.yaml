@@ -1,0 +1,23 @@
+# Self-contained config: alpha beam defined inline + custom emulsion entry.
+# Useful as a template for emulsion range-energy work where the standard
+# library values are not enough.
+
+particles:
+  alpha:
+    mass_mev: 3727.379          # PDG 2024 alpha rest-mass energy
+    charge: 2
+
+materials:
+  my_emulsion_2024:
+    z_over_a: 0.4255
+    density_g_per_cm3: 3.80
+    mean_excitation_energy_ev: 331.0
+    reference: "calibration run 2024-06"
+
+beam:
+  particle: alpha
+  kinetic_energy: 5.0
+  energy_unit: MeV
+
+target:
+  material: my_emulsion_2024

@@ -85,3 +85,29 @@ def get_particle(name: str | Particle) -> Particle:
     raise ValueError(
       f"Unknown particle {name!r}. Known particles: {known}"
     ) from exc
+
+
+def register_particle(
+  name: str,
+  mass_mev: float,
+  charge: int,
+  aliases: list[str] | None = None,
+) -> Particle:
+  """Register a new particle so :func:`get_particle` can find it.
+
+  Used by :func:`energy_loss.config.load_config` to handle inline
+  ``particles:`` blocks in a setup YAML. Later calls with the same name
+  overwrite earlier ones, so users can override built-ins.
+  """
+  if mass_mev <= 0.0:
+    raise ValueError(f"mass_mev must be positive, got {mass_mev}")
+  p = Particle(name=name, mass_mev=float(mass_mev), charge=int(charge))
+  _PARTICLES[name] = p
+  for alias in aliases or []:
+    _ALIASES[alias] = name
+  return p
+
+
+def list_particles() -> list[str]:
+  """Return the canonical names of all currently registered particles."""
+  return sorted(_PARTICLES)

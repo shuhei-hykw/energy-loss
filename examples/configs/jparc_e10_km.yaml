@@ -1,0 +1,14 @@
+# J-PARC E10 setup: K- beam at 1.5 GeV/c on a Be target with
+# mass thickness 3.5 g/cm^2.
+#
+# At p = 1.5 GeV/c, m_K = 493.68 MeV/c^2 -> T_kin ~= 1085 MeV.
+
+beam:
+  particle: kaon-
+  momentum: 1.5
+  momentum_unit: GeV/c
+
+target:
+  material: Be
+  mass_thickness: 3.5
+  mass_thickness_unit: g/cm^2

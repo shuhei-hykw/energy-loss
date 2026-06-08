@@ -22,9 +22,17 @@ Two main use cases:
   Bloch corrections yet).
 - YAML-driven material registry (see `energy_loss/data/materials.yaml`).
 - Pure elements: Z, A and standard density come from `periodictable`;
-  only the empirical mean excitation energy `I` lives in YAML.
+  isotope-specific entries (e.g. `9Be`) are supported via `isotope: <N>`.
+  Only the empirical mean excitation energy `I` lives in YAML.
 - Particles: proton, π±, K±, μ±, e±. Masses for proton/muon/electron
   come from `scipy.constants` (CODATA); π and K from PDG 2024.
+- **Single-file setup YAML** (`load_config(path)`) capturing beam
+  (particle + kinetic energy *or* momentum) and target (material +
+  optional linear thickness *or* grammage). Optional inline
+  `particles:` / `materials:` blocks register custom entries.
+- Stopping power is evaluated at the beam's *initial* kinetic energy;
+  no step-wise integration of `dT/dx = -S(T(x))` yet (planned for
+  v0.2, in the `transport` submodule).
 - `transport` / `range` / `emulsion` submodules are **not** in v0.1.
 
 Caveats:
@@ -63,21 +71,47 @@ ruff check  # lint
 
 ## Usage
 
+### Direct call
+
 ```python
 from energy_loss import get_material, list_materials
 from energy_loss.stopping import bethe_mass_stopping_power
 
-print(list_materials())
-# ['Be', 'H2', 'He', 'LH2', 'P10', 'air', 'aluminum', 'carbon',
-#  'kapton', 'mylar', 'nuclear_emulsion', 'plastic_scintillator']
-
-# 100 MeV proton in beryllium [MeV cm^2 / g]
+# 100 MeV proton in 9Be [MeV cm^2 / g]
 s = bethe_mass_stopping_power("proton", 100.0, "Be")
 ```
 
-### Adding your own targets
+### Setup YAML (recommended)
 
-Drop a YAML file next to your script and load it at import time:
+A single YAML file fully captures a beam + target calculation. For
+example, the J-PARC E10 case at `examples/configs/jparc_e10_pim.yaml`:
+
+```yaml
+beam:
+  particle: pion-
+  momentum: 1.2
+  momentum_unit: GeV/c
+
+target:
+  material: Be
+  mass_thickness: 3.5
+  mass_thickness_unit: g/cm^2
+```
+
+```bash
+python examples/spectroscopy_loss.py \
+       examples/configs/jparc_e10_pim.yaml \
+       examples/configs/jparc_e10_km.yaml
+```
+
+Optional sections let a config be self-contained — see
+`examples/configs/alpha_in_emulsion.yaml` for an inline `particles:` /
+`materials:` example.
+
+### Adding your own targets / particles
+
+Either via the same setup YAML (inline `particles:` / `materials:`
+blocks) or via a separate registry file:
 
 ```yaml
 # my_targets.yaml
@@ -85,13 +119,11 @@ materials:
   cu_window:
     element: Cu             # Z, A, density auto-resolved from periodictable
     mean_excitation_energy_ev: 322.0
-    reference: "PDG"
 
-  my_emulsion_2024:
-    z_over_a: 0.4255
-    density_g_per_cm3: 3.80
-    mean_excitation_energy_ev: 331.0
-    reference: "calibration run 2024-06"
+  my_9be:
+    element: Be
+    isotope: 9              # 9Be(Enriched) — uses the isotopic mass
+    mean_excitation_energy_ev: 63.7
 ```
 
 ```python
@@ -100,9 +132,18 @@ load_materials_from_yaml("my_targets.yaml")
 get_material("cu_window")
 ```
 
-For compounds and mixtures (no single elemental Z/A), specify
-`z_over_a` and `density_g_per_cm3` directly. The `mean_excitation_energy_ev`
-field is always required.
+For compounds and mixtures, specify `z_over_a` and `density_g_per_cm3`
+directly. `mean_excitation_energy_ev` is always required.
+
+### Verification plot
+
+```bash
+python examples/plot_verification.py
+```
+
+writes `examples/figures/{stopping_power_curves,jparc_e10_marker}.png`
+showing the Bethe curve on 9Be for proton / π⁻ / K⁻ and the J-PARC E10
+working points overlaid.
 
 ## Notes on numerical values
 

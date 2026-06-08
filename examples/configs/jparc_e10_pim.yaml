@@ -1,0 +1,14 @@
+# J-PARC E10 setup: pi- beam at 1.2 GeV/c on a Be target with
+# mass thickness 3.5 g/cm^2.
+#
+# At p = 1.2 GeV/c, m_pi = 139.57 MeV/c^2 -> T_kin ~= 1068 MeV.
+
+beam:
+  particle: pion-
+  momentum: 1.2
+  momentum_unit: GeV/c
+
+target:
+  material: Be
+  mass_thickness: 3.5
+  mass_thickness_unit: g/cm^2

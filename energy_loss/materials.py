@@ -47,32 +47,57 @@ _MATERIALS: dict[str, Material] = {}
 _ALIASES: dict[str, str] = {}
 
 
-def _resolve_element_defaults(symbol: str) -> tuple[float, float]:
+def _resolve_element_defaults(
+  symbol: str, isotope: int | None = None
+) -> tuple[float, float]:
   """Return ``(z_over_a, density_g_per_cm3)`` for an element symbol.
 
-  Uses :mod:`periodictable`. Raises ``ValueError`` if the symbol is
-  unknown or the element has no density listed.
+  If ``isotope`` is given, use that isotopic mass for ``Z/A`` instead of
+  the natural standard atomic weight. Uses :mod:`periodictable`.
   """
   try:
     el = _pt.elements.symbol(symbol)
   except ValueError as exc:
     raise ValueError(f"Unknown element symbol {symbol!r}") from exc
-  z_over_a = el.number / el.mass
-  density = el.density
+
+  if isotope is None:
+    z = el.number
+    a = el.mass
+    density = el.density
+  else:
+    try:
+      iso = el[int(isotope)]
+    except KeyError as exc:
+      raise ValueError(
+        f"Unknown isotope {symbol}-{isotope}"
+      ) from exc
+    z = iso.element.number
+    a = iso.mass
+    # Isotopic density falls back to natural density when not tabulated.
+    density = getattr(iso, "density", None) or el.density
+
   if density is None:
+    label = symbol if isotope is None else f"{symbol}-{isotope}"
     raise ValueError(
-      f"periodictable does not provide a density for element {symbol!r}; "
+      f"periodictable does not provide a density for {label!r}; "
       "specify density_g_per_cm3 explicitly in the YAML entry."
     )
-  return float(z_over_a), float(density)
+  return float(z / a), float(density)
 
 
 def _build_material(name: str, entry: dict[str, Any]) -> Material:
   """Construct a :class:`Material` from one YAML entry."""
   element = entry.get("element")
+  isotope = entry.get("isotope")
   if element is not None:
-    z_over_a_default, density_default = _resolve_element_defaults(element)
+    z_over_a_default, density_default = _resolve_element_defaults(
+      element, isotope
+    )
   else:
+    if isotope is not None:
+      raise ValueError(
+        f"Material {name!r}: 'isotope' requires an 'element' field."
+      )
     z_over_a_default, density_default = None, None
 
   z_over_a = entry.get("z_over_a", z_over_a_default)
