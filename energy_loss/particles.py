@@ -1,15 +1,32 @@
 """Particle definitions.
 
-v0.1 covers heavy charged particles (proton, pi, K, mu) plus electron
-as a placeholder. Electron stopping power is NOT implemented in v0.1 —
-Bethe formula for electrons differs and is out of scope.
-
-Masses are from PDG 2024 (rest mass energy in MeV).
+Where :mod:`scipy.constants` provides a CODATA mass for a particle
+(electron, muon, proton), that value is used directly. For mesons that
+scipy does not carry (pions, kaons), PDG 2024 values are used; those
+are the only hand-typed masses in this module.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from scipy import constants as _sc
+
+
+def _mev(key: str) -> float:
+  """Helper: pull '<particle> mass energy equivalent in MeV' from scipy."""
+  return _sc.physical_constants[key][0]
+
+
+_ELECTRON_MEV = _mev("electron mass energy equivalent in MeV")
+_MUON_MEV = _mev("muon mass energy equivalent in MeV")
+_PROTON_MEV = _mev("proton mass energy equivalent in MeV")
+
+# PDG 2024 (not in scipy.constants):
+#   pi+- : 139.57039 MeV/c^2
+#   K+-  : 493.677  MeV/c^2
+_PION_MEV = 139.57039
+_KAON_MEV = 493.677
 
 
 @dataclass(frozen=True)
@@ -21,7 +38,7 @@ class Particle:
   name : str
     Canonical name (e.g. ``"proton"``).
   mass_mev : float
-    Rest mass energy [MeV].
+    Rest-mass energy [MeV].
   charge : int
     Charge in units of the elementary charge (signed).
   """
@@ -32,18 +49,17 @@ class Particle:
 
 
 _PARTICLES: dict[str, Particle] = {
-  "proton": Particle("proton", 938.27208816, +1),
-  "pion+": Particle("pion+", 139.57039, +1),
-  "pion-": Particle("pion-", 139.57039, -1),
-  "kaon+": Particle("kaon+", 493.677, +1),
-  "kaon-": Particle("kaon-", 493.677, -1),
-  "muon+": Particle("muon+", 105.6583755, +1),
-  "muon-": Particle("muon-", 105.6583755, -1),
-  "electron": Particle("electron", 0.51099895069, -1),
-  "positron": Particle("positron", 0.51099895069, +1),
+  "proton": Particle("proton", _PROTON_MEV, +1),
+  "pion+": Particle("pion+", _PION_MEV, +1),
+  "pion-": Particle("pion-", _PION_MEV, -1),
+  "kaon+": Particle("kaon+", _KAON_MEV, +1),
+  "kaon-": Particle("kaon-", _KAON_MEV, -1),
+  "muon+": Particle("muon+", _MUON_MEV, +1),
+  "muon-": Particle("muon-", _MUON_MEV, -1),
+  "electron": Particle("electron", _ELECTRON_MEV, -1),
+  "positron": Particle("positron", _ELECTRON_MEV, +1),
 }
 
-# Common aliases.
 _ALIASES: dict[str, str] = {
   "p": "proton",
   "pi+": "pion+",

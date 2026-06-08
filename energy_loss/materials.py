@@ -1,28 +1,21 @@
-"""Material definitions.
+"""Material registry.
 
-A :class:`Material` is represented by an *effective* (Z, A, I, density),
-which is the form the Bethe formula needs. For compounds and mixtures
-this is the effective <Z/A> times A together with a Bragg-additivity-
-based mean excitation energy I.
-
-The values here are reasonable defaults to get v0.1 working; they are
-NOT a substitute for experiment-specific calibration. In particular
-``nuclear_emulsion`` density and composition vary between emulsion
-types and processing — see README.
-
-Units
------
-- density : g / cm^3
-- mean excitation energy I : eV
-
-References:
-- PDG "Atomic and nuclear properties of materials" 2024 table
-- NIST PSTAR/ESTAR documentation for I values
+Materials are defined declaratively in
+``energy_loss/data/materials.yaml`` (and any user YAML files registered
+via :func:`load_materials_from_yaml`). The loader resolves pure-element
+entries via the :mod:`periodictable` package so atomic number, atomic
+mass and (where applicable) density don't have to be repeated by hand.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import resources
+from pathlib import Path
+from typing import Any
+
+import periodictable as _pt
+import yaml as _yaml
 
 
 @dataclass(frozen=True)
@@ -39,65 +32,119 @@ class Material:
     Mean excitation energy I [eV].
   density_g_per_cm3 : float
     Density [g/cm^3].
+  reference : str
+    Short note on the source of the values (free-form).
   """
 
   name: str
   z_over_a: float
   mean_excitation_energy_ev: float
   density_g_per_cm3: float
+  reference: str = ""
 
 
-# PDG-style values. I values for compounds are approximate effective
-# values; for high-precision work use NIST or experiment calibration.
-_MATERIALS: dict[str, Material] = {
-  # Hydrogen gas, NTP.
-  "H2": Material("H2", z_over_a=0.99212, mean_excitation_energy_ev=19.2,
-                 density_g_per_cm3=8.376e-5),
-  # Liquid hydrogen.
-  "LH2": Material("LH2", z_over_a=0.99212, mean_excitation_energy_ev=21.8,
-                  density_g_per_cm3=0.0708),
-  # Helium gas, NTP.
-  "He": Material("He", z_over_a=0.49967, mean_excitation_energy_ev=41.8,
-                 density_g_per_cm3=1.663e-4),
-  # Dry air, NTP (PDG).
-  "air": Material("air", z_over_a=0.49919, mean_excitation_energy_ev=85.7,
-                  density_g_per_cm3=1.205e-3),
-  # P10: 90% Ar + 10% CH4 by volume, NTP, density ~ 1.561e-3 g/cm^3.
-  "P10": Material("P10", z_over_a=0.4505, mean_excitation_energy_ev=174.0,
-                  density_g_per_cm3=1.561e-3),
-  # Generic polystyrene-based plastic scintillator (e.g. NE-102 / BC-408).
-  "plastic_scintillator": Material(
-    "plastic_scintillator", z_over_a=0.5414,
-    mean_excitation_energy_ev=64.7, density_g_per_cm3=1.032,
-  ),
-  # Kapton polyimide.
-  "kapton": Material("kapton", z_over_a=0.5126,
-                     mean_excitation_energy_ev=79.6,
-                     density_g_per_cm3=1.42),
-  # Mylar (PET).
-  "mylar": Material("mylar", z_over_a=0.5197,
-                    mean_excitation_energy_ev=78.7,
-                    density_g_per_cm3=1.40),
-  # Aluminium.
-  "aluminum": Material("aluminum", z_over_a=13.0 / 26.9815385,
-                       mean_excitation_energy_ev=166.0,
-                       density_g_per_cm3=2.699),
-  # Amorphous carbon (graphite ~2.21).
-  "carbon": Material("carbon", z_over_a=6.0 / 12.0107,
-                     mean_excitation_energy_ev=78.0,
-                     density_g_per_cm3=2.21),
-  # Nuclear emulsion (rough effective values; CALIBRATE per emulsion).
-  "nuclear_emulsion": Material(
-    "nuclear_emulsion", z_over_a=0.4255,
-    mean_excitation_energy_ev=331.0, density_g_per_cm3=3.815,
-  ),
-}
+_MATERIALS: dict[str, Material] = {}
+_ALIASES: dict[str, str] = {}
 
-_ALIASES: dict[str, str] = {
-  "Al": "aluminum",
-  "C": "carbon",
-  "emulsion": "nuclear_emulsion",
-}
+
+def _resolve_element_defaults(symbol: str) -> tuple[float, float]:
+  """Return ``(z_over_a, density_g_per_cm3)`` for an element symbol.
+
+  Uses :mod:`periodictable`. Raises ``ValueError`` if the symbol is
+  unknown or the element has no density listed.
+  """
+  try:
+    el = _pt.elements.symbol(symbol)
+  except ValueError as exc:
+    raise ValueError(f"Unknown element symbol {symbol!r}") from exc
+  z_over_a = el.number / el.mass
+  density = el.density
+  if density is None:
+    raise ValueError(
+      f"periodictable does not provide a density for element {symbol!r}; "
+      "specify density_g_per_cm3 explicitly in the YAML entry."
+    )
+  return float(z_over_a), float(density)
+
+
+def _build_material(name: str, entry: dict[str, Any]) -> Material:
+  """Construct a :class:`Material` from one YAML entry."""
+  element = entry.get("element")
+  if element is not None:
+    z_over_a_default, density_default = _resolve_element_defaults(element)
+  else:
+    z_over_a_default, density_default = None, None
+
+  z_over_a = entry.get("z_over_a", z_over_a_default)
+  density = entry.get("density_g_per_cm3", density_default)
+
+  if z_over_a is None:
+    raise ValueError(
+      f"Material {name!r}: missing 'z_over_a' (and no 'element' fallback)."
+    )
+  if density is None:
+    raise ValueError(
+      f"Material {name!r}: missing 'density_g_per_cm3' "
+      "(and no 'element' fallback)."
+    )
+  try:
+    i_ev = entry["mean_excitation_energy_ev"]
+  except KeyError as exc:
+    raise ValueError(
+      f"Material {name!r}: 'mean_excitation_energy_ev' is required."
+    ) from exc
+
+  return Material(
+    name=name,
+    z_over_a=float(z_over_a),
+    mean_excitation_energy_ev=float(i_ev),
+    density_g_per_cm3=float(density),
+    reference=str(entry.get("reference", "")),
+  )
+
+
+def _ingest(doc: dict[str, Any]) -> None:
+  """Add all materials from a parsed YAML document into the registry."""
+  try:
+    materials = doc["materials"]
+  except KeyError as exc:
+    raise ValueError(
+      "YAML document must have a top-level 'materials' mapping."
+    ) from exc
+  if not isinstance(materials, dict):
+    raise ValueError("'materials' must be a mapping (name -> entry).")
+
+  for name, entry in materials.items():
+    if not isinstance(entry, dict):
+      raise ValueError(f"Material {name!r}: entry must be a mapping.")
+    mat = _build_material(name, entry)
+    _MATERIALS[name] = mat
+    for alias in entry.get("aliases", []) or []:
+      _ALIASES[alias] = name
+
+
+def load_materials_from_yaml(path: str | Path) -> None:
+  """Register additional materials from a user-supplied YAML file.
+
+  Later entries with the same name overwrite earlier ones, so users can
+  override built-in defaults (e.g. for an experiment-specific emulsion
+  calibration).
+  """
+  with open(path, encoding="utf-8") as f:
+    doc = _yaml.safe_load(f)
+  _ingest(doc)
+
+
+def _load_builtin() -> None:
+  """Load the bundled ``materials.yaml`` once at import time."""
+  with resources.files("energy_loss.data").joinpath("materials.yaml").open(
+    "r", encoding="utf-8"
+  ) as f:
+    doc = _yaml.safe_load(f)
+  _ingest(doc)
+
+
+_load_builtin()
 
 
 def get_material(name: str | Material) -> Material:
@@ -112,3 +159,8 @@ def get_material(name: str | Material) -> Material:
     raise ValueError(
       f"Unknown material {name!r}. Known materials: {known}"
     ) from exc
+
+
+def list_materials() -> list[str]:
+  """Return the canonical names of all currently registered materials."""
+  return sorted(_MATERIALS)

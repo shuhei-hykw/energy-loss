@@ -1,0 +1,109 @@
+# Material definitions for energy_loss.
+#
+# Two entry styles:
+#
+# (a) Pure elements: specify ``element: <symbol>``. The loader pulls
+#     Z, atomic mass and (solid) density from the `periodictable`
+#     package. You may still override ``density_g_per_cm3`` or
+#     ``z_over_a`` if you have a more appropriate value (e.g. graphite
+#     vs amorphous carbon, gas at NTP, ...).
+#
+# (b) Compounds and mixtures: must provide ``z_over_a`` and
+#     ``density_g_per_cm3`` directly, since these have no single
+#     elemental source.
+#
+# Mean excitation energy ``I`` [eV] is always required and is empirical
+# (NIST / PDG tabulated, no scientific library exposes it).
+#
+# Optional fields:
+#   aliases    : alternate names this material answers to
+#   reference  : where the numbers came from
+#   comment    : free-form caveats
+
+materials:
+
+  # ---------------- elemental targets ----------------
+  Be:
+    element: Be
+    aliases: [beryllium]
+    mean_excitation_energy_ev: 63.7
+    reference: "Z, A, density from periodictable; I from NIST PSTAR / PDG"
+
+  carbon:
+    element: C
+    aliases: [C]
+    # periodictable's C density is 2.2 g/cm^3 (amorphous); PDG quotes
+    # graphite at 2.21. We keep periodictable's value.
+    mean_excitation_energy_ev: 78.0
+    reference: "Z, A, density from periodictable; I from PDG"
+
+  aluminum:
+    element: Al
+    aliases: [Al]
+    mean_excitation_energy_ev: 166.0
+    reference: "Z, A, density from periodictable; I from PDG"
+
+  # ---------------- gases ----------------
+  # For gases periodictable returns the *liquid* density, so we override.
+  H2:
+    element: H
+    density_g_per_cm3: 8.376e-5
+    mean_excitation_energy_ev: 19.2
+    reference: "Z/A from periodictable; density and I from PDG (NTP)"
+
+  LH2:
+    element: H
+    density_g_per_cm3: 0.0708
+    mean_excitation_energy_ev: 21.8
+    reference: "Z/A from periodictable; density and I from PDG (liquid H2)"
+
+  He:
+    element: He
+    density_g_per_cm3: 1.663e-4
+    mean_excitation_energy_ev: 41.8
+    reference: "Z/A from periodictable; density and I from PDG (NTP)"
+
+  air:
+    # Compound: explicit effective Z/A and density.
+    z_over_a: 0.49919
+    density_g_per_cm3: 1.205e-3
+    mean_excitation_energy_ev: 85.7
+    reference: "PDG (dry air, NTP)"
+
+  P10:
+    z_over_a: 0.4505
+    density_g_per_cm3: 1.561e-3
+    mean_excitation_energy_ev: 174.0
+    reference: "90% Ar + 10% CH4 (NTP); effective Bragg-additivity values"
+    comment: "Verify with measurement for precise work."
+
+  # ---------------- plastics / foils ----------------
+  plastic_scintillator:
+    z_over_a: 0.5414
+    density_g_per_cm3: 1.032
+    mean_excitation_energy_ev: 64.7
+    reference: "PDG (polyvinyltoluene-based, e.g. BC-408 / NE-102)"
+
+  kapton:
+    z_over_a: 0.5126
+    density_g_per_cm3: 1.42
+    mean_excitation_energy_ev: 79.6
+    reference: "PDG (polyimide)"
+
+  mylar:
+    z_over_a: 0.5197
+    density_g_per_cm3: 1.40
+    mean_excitation_energy_ev: 78.7
+    reference: "PDG (PET)"
+
+  # ---------------- emulsion ----------------
+  nuclear_emulsion:
+    aliases: [emulsion]
+    z_over_a: 0.4255
+    density_g_per_cm3: 3.815
+    mean_excitation_energy_ev: 331.0
+    reference: "rough effective values"
+    comment: |
+      Nominal. Real emulsions vary in composition and density with the
+      gel/grain ratio and post-processing; calibrate against your own
+      batch for range-energy work (see README).

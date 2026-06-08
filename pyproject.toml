@@ -12,6 +12,9 @@ license = { text = "MIT" }
 authors = [{ name = "Shuhei Hayakawa" }]
 dependencies = [
   "numpy>=1.26",
+  "scipy>=1.11",
+  "pyyaml>=6.0",
+  "periodictable>=1.7",
 ]
 
 [project.optional-dependencies]
@@ -23,6 +26,9 @@ dev = [
 [tool.setuptools.packages.find]
 include = ["energy_loss*"]
 exclude = ["tests*", "examples*"]
+
+[tool.setuptools.package-data]
+energy_loss = ["data/*.yaml"]
 
 [tool.ruff]
 line-length = 100

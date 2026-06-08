@@ -12,7 +12,12 @@ Internal unit convention (used everywhere unless stated otherwise):
 Public API re-exports the most commonly used objects.
 """
 
-from energy_loss.materials import Material, get_material
+from energy_loss.materials import (
+  Material,
+  get_material,
+  list_materials,
+  load_materials_from_yaml,
+)
 from energy_loss.particles import Particle, get_particle
 
 __all__ = [
@@ -20,6 +25,8 @@ __all__ = [
   "Particle",
   "get_material",
   "get_particle",
+  "list_materials",
+  "load_materials_from_yaml",
 ]
 
 __version__ = "0.1.0"
