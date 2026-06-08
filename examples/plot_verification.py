@@ -91,7 +91,7 @@ def _marker_for_config(yaml_path: Path) -> tuple[str, float, float, float]:
 
 
 def plot_jparc_e10_marker() -> Path:
-  fig, ax = plt.subplots(figsize=(8.5, 5.5))
+  fig, ax = plt.subplots(figsize=(8.0, 5.0))
   curves = {
     "pion-": (_curve("pion-", "Be"), r"$\pi^{-}$", "C0"),
     "kaon-": (_curve("kaon-", "Be"), r"$K^{-}$", "C1"),
@@ -99,38 +99,33 @@ def plot_jparc_e10_marker() -> Path:
   for _, ((t, s), label, color) in curves.items():
     ax.loglog(t, s, "-", color=color, label=label)
 
-  # Place markers with leader-line annotations into the empty upper-left
-  # corner so the labels don't obscure the curves near MIP.
   marker_specs = [
-    ("jparc_e10_pim.yaml", "o", "C0", (0.05, 0.92)),
-    ("jparc_e10_km.yaml", "s", "C1", (0.05, 0.75)),
+    ("jparc_e10_pim.yaml", "o", "C0"),
+    ("jparc_e10_km.yaml", "s", "C1"),
   ]
-  for cfg_name, marker, color, (x_ax, y_ax) in marker_specs:
+  marker_labels: list[str] = []
+  for cfg_name, marker, color in marker_specs:
     name, t, s, de = _marker_for_config(CFG_DIR / cfg_name)
     ax.loglog(
       t, s, marker,
-      markersize=11, markeredgewidth=1.8,
+      markersize=10, markeredgewidth=1.5,
       markeredgecolor=color, markerfacecolor="white",
     )
-    text = (
-      f"{name} @ J-PARC E10\n"
-      f"  T = {t / 1000.0:.3f} GeV\n"
-      f"  dE/dx = {s:.3f} MeV cm$^2$/g\n"
-      f"  $\\Delta E\\approx${de:.2f} MeV"
+    marker_labels.append(
+      f"{name} @ J-PARC E10: T={t / 1000.0:.3f} GeV, "
+      f"dE/dx={s:.3f} MeV cm$^2$/g, $\\Delta E\\approx${de:.2f} MeV"
     )
-    ax.annotate(
-      text,
-      xy=(t, s),
-      xycoords="data",
-      xytext=(x_ax, y_ax),
-      textcoords="axes fraction",
-      fontsize=9,
-      ha="left", va="top",
-      bbox={"boxstyle": "round,pad=0.35", "fc": "white",
-            "ec": color, "lw": 1.0, "alpha": 0.9},
-      arrowprops={"arrowstyle": "->", "color": color, "lw": 1.0,
-                  "connectionstyle": "arc3,rad=-0.15"},
-    )
+
+  # Single text box in the empty upper-left corner; no leader arrows.
+  ax.text(
+    0.02, 0.97,
+    "\n".join(marker_labels),
+    transform=ax.transAxes,
+    fontsize=9,
+    ha="left", va="top",
+    bbox={"boxstyle": "round,pad=0.4", "fc": "white",
+          "ec": "0.6", "lw": 0.8, "alpha": 0.9},
+  )
 
   ax.set_xlabel("kinetic energy [MeV]")
   ax.set_ylabel(r"mass stopping power $-dE/(\rho\,dx)$ [MeV cm$^2$/g]")
