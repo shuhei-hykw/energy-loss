@@ -83,6 +83,8 @@ def test_beam_kinetic_energy_path(tmp_path: Path):
       energy_unit: GeV
     target:
       material: aluminum
+      thickness: 1.0
+      thickness_unit: mm
     """
   )
   p = tmp_path / "ke.yaml"
@@ -105,6 +107,8 @@ def test_beam_must_specify_exactly_one_kinematic_input(tmp_path: Path):
       momentum_unit: GeV/c
     target:
       material: aluminum
+      thickness: 1.0
+      thickness_unit: mm
     """
   )
   p = tmp_path / "bad.yaml"
@@ -128,7 +132,7 @@ def test_target_thickness_and_mass_thickness_are_mutually_exclusive(tmp_path: Pa
   )
   p = tmp_path / "bad.yaml"
   p.write_text(yaml_text)
-  with pytest.raises(ValueError, match="at most one"):
+  with pytest.raises(ValueError, match="exactly one"):
     load_config(p)
 
 
@@ -137,6 +141,8 @@ def test_missing_beam_section(tmp_path: Path):
     """
     target:
       material: aluminum
+      thickness: 1.0
+      thickness_unit: mm
     """
   )
   p = tmp_path / "bad.yaml"

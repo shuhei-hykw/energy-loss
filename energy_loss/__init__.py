@@ -19,6 +19,7 @@ from energy_loss.config import (
   compute_linear_stopping_power,
   compute_mass_stopping_power,
   load_config,
+  propagate_config,
 )
 from energy_loss.materials import (
   Material,
@@ -32,12 +33,21 @@ from energy_loss.particles import (
   list_particles,
   register_particle,
 )
+from energy_loss.transport import (
+  Layer,
+  LayerResult,
+  PropagationResult,
+  propagate,
+)
 
 __all__ = [
   "Beam",
   "Config",
+  "Layer",
+  "LayerResult",
   "Material",
   "Particle",
+  "PropagationResult",
   "Target",
   "compute_linear_stopping_power",
   "compute_mass_stopping_power",
@@ -47,6 +57,8 @@ __all__ = [
   "list_particles",
   "load_config",
   "load_materials_from_yaml",
+  "propagate",
+  "propagate_config",
   "register_particle",
 ]
 

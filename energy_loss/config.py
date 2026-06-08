@@ -35,7 +35,9 @@ Schema
       momentum: <float>
       momentum_unit: GeV/c      # default MeV/c
 
-    # Required: target definition.
+    # Required: target definition. Two equivalent forms.
+    #
+    # (a) Single layer (back-compat with v0.1):
     target:
       material: <name>
       # Optional thickness, specified either linearly or as grammage.
@@ -44,6 +46,16 @@ Schema
       # ... or ...
       mass_thickness: <float>
       mass_thickness_unit: g/cm^2   # default g/cm^2
+    #
+    # (b) Layer stack (v0.2+):
+    target:
+      layers:
+        - material: kapton
+          thickness: 50
+          thickness_unit: um
+        - material: Be
+          mass_thickness: 3.5
+          mass_thickness_unit: g/cm^2
 """
 
 from __future__ import annotations
@@ -66,6 +78,7 @@ from energy_loss.stopping.models import (
   linear_stopping_power,
   mass_stopping_power,
 )
+from energy_loss.transport import Layer, PropagationResult, propagate
 from energy_loss.units import (
   energy_to_mev,
   kinetic_energy_from_momentum,
@@ -90,16 +103,42 @@ class Beam:
 
 @dataclass(frozen=True)
 class Target:
-  """A target: a :class:`Material` and, optionally, its thickness.
+  """A target as an ordered stack of :class:`Layer`.
 
-  Both linear thickness [cm] and mass thickness [g/cm^2] are populated
-  whenever a thickness is given in the config, regardless of which form
-  the user wrote.
+  Single-material targets are represented as a single-element tuple.
+  Convenience properties forward to that single layer; multi-layer
+  consumers should iterate :attr:`layers` directly.
   """
 
-  material: Material
-  thickness_cm: float | None = None
-  mass_thickness_g_per_cm2: float | None = None
+  layers: tuple[Layer, ...]
+
+  @property
+  def is_single_layer(self) -> bool:
+    return len(self.layers) == 1
+
+  @property
+  def material(self) -> Material:
+    """Material of the (first) layer.
+
+    For multi-layer stacks this returns the first layer's material; the
+    caller is responsible for handling the rest.
+    """
+    return self.layers[0].material
+
+  @property
+  def thickness_cm(self) -> float:
+    """Linear thickness of the first layer [cm]."""
+    return self.layers[0].thickness_cm
+
+  @property
+  def mass_thickness_g_per_cm2(self) -> float:
+    """Grammage of the first layer [g/cm^2]."""
+    return self.layers[0].mass_thickness_g_per_cm2
+
+  @property
+  def total_mass_thickness_g_per_cm2(self) -> float:
+    """Sum of grammage over all layers [g/cm^2]."""
+    return sum(layer.mass_thickness_g_per_cm2 for layer in self.layers)
 
 
 @dataclass(frozen=True)
@@ -177,6 +216,32 @@ def _build_beam(doc: dict[str, Any]) -> Beam:
   )
 
 
+def _layer_from_section(section: dict[str, Any], where: str) -> Layer:
+  try:
+    material_name = section["material"]
+  except KeyError as exc:
+    raise ValueError(
+      f"{where}: missing required field {exc.args[0]!r}."
+    ) from exc
+  material = get_material(str(material_name))
+
+  has_thick = "thickness" in section
+  has_mt = "mass_thickness" in section
+  if has_thick == has_mt:
+    raise ValueError(
+      f"{where}: specify exactly one of 'thickness' or 'mass_thickness'."
+    )
+  if has_thick:
+    unit = section.get("thickness_unit", "cm")
+    thickness_cm = length_to_cm(float(section["thickness"]), str(unit))
+    return Layer.from_thickness(material, thickness_cm)
+  unit = section.get("mass_thickness_unit", "g/cm^2")
+  mass_thickness = mass_thickness_to_g_per_cm2(
+    float(section["mass_thickness"]), str(unit)
+  )
+  return Layer.from_mass_thickness(material, mass_thickness)
+
+
 def _build_target(doc: dict[str, Any]) -> Target:
   try:
     section = doc["target"]
@@ -184,39 +249,24 @@ def _build_target(doc: dict[str, Any]) -> Target:
     raise ValueError("Config YAML is missing required 'target' section.") from exc
   if not isinstance(section, dict):
     raise ValueError("'target' must be a mapping.")
-  try:
-    material_name = section["material"]
-  except KeyError as exc:
-    raise ValueError(
-      f"target: missing required field {exc.args[0]!r}."
-    ) from exc
-  material = get_material(str(material_name))
 
-  has_thick = "thickness" in section
-  has_mt = "mass_thickness" in section
-  if has_thick and has_mt:
-    raise ValueError(
-      "target: specify at most one of 'thickness' or 'mass_thickness'."
+  if "layers" in section:
+    if "material" in section or "thickness" in section or "mass_thickness" in section:
+      raise ValueError(
+        "target: 'layers' cannot be combined with 'material' / "
+        "'thickness' / 'mass_thickness' at the same level."
+      )
+    raw_layers = section["layers"]
+    if not isinstance(raw_layers, list) or not raw_layers:
+      raise ValueError("target: 'layers' must be a non-empty list.")
+    layers = tuple(
+      _layer_from_section(entry, where=f"target.layers[{i}]")
+      for i, entry in enumerate(raw_layers)
     )
+  else:
+    layers = (_layer_from_section(section, where="target"),)
 
-  thickness_cm: float | None = None
-  mass_thickness: float | None = None
-  if has_thick:
-    unit = section.get("thickness_unit", "cm")
-    thickness_cm = length_to_cm(float(section["thickness"]), str(unit))
-    mass_thickness = thickness_cm * material.density_g_per_cm3
-  elif has_mt:
-    unit = section.get("mass_thickness_unit", "g/cm^2")
-    mass_thickness = mass_thickness_to_g_per_cm2(
-      float(section["mass_thickness"]), str(unit)
-    )
-    thickness_cm = mass_thickness / material.density_g_per_cm3
-
-  return Target(
-    material=material,
-    thickness_cm=thickness_cm,
-    mass_thickness_g_per_cm2=mass_thickness,
-  )
+  return Target(layers=layers)
 
 
 def load_config(path: str | Path) -> Config:
@@ -240,20 +290,41 @@ def load_config(path: str | Path) -> Config:
 
 
 def compute_mass_stopping_power(config: Config, model: str = "bethe") -> float:
-  """Convenience: mass stopping power [MeV cm^2/g] for ``config``."""
+  """Convenience: mass stopping power [MeV cm^2/g] at the beam's initial
+  kinetic energy, in the *first* layer of the target. This is the v0.1
+  single-point evaluator; for accurate energy loss through a layer
+  stack use :func:`propagate_config`.
+  """
   return mass_stopping_power(
     config.beam.particle,
     config.beam.kinetic_energy_mev,
-    config.target.material,
+    config.target.layers[0].material,
     model=model,
   )
 
 
 def compute_linear_stopping_power(config: Config, model: str = "bethe") -> float:
-  """Convenience: linear stopping power [MeV/cm] for ``config``."""
+  """Linear stopping power [MeV/cm] counterpart to
+  :func:`compute_mass_stopping_power`.
+  """
   return linear_stopping_power(
     config.beam.particle,
     config.beam.kinetic_energy_mev,
-    config.target.material,
+    config.target.layers[0].material,
     model=model,
+  )
+
+
+def propagate_config(
+  config: Config,
+  model: str = "bethe",
+  step_g_per_cm2: float | None = None,
+) -> PropagationResult:
+  """Run the step-wise integrator on ``config``'s beam and target stack."""
+  return propagate(
+    config.beam.particle,
+    config.beam.kinetic_energy_mev,
+    config.target.layers,
+    model=model,
+    step_g_per_cm2=step_g_per_cm2,
   )

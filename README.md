@@ -16,7 +16,9 @@ Two main use cases:
    formula alone is *not* trusted in this short-range regime; tables
    are the primary route.
 
-## v0.1 scope
+## Scope
+
+### v0.1
 
 - Heavy-charged-particle Bethe formula (no density / shell / Barkas /
   Bloch corrections yet).
@@ -26,14 +28,30 @@ Two main use cases:
   Only the empirical mean excitation energy `I` lives in YAML.
 - Particles: proton, π±, K±, μ±, e±. Masses for proton/muon/electron
   come from `scipy.constants` (CODATA); π and K from PDG 2024.
-- **Single-file setup YAML** (`load_config(path)`) capturing beam
+- Single-file setup YAML (`load_config(path)`) capturing beam
   (particle + kinetic energy *or* momentum) and target (material +
   optional linear thickness *or* grammage). Optional inline
   `particles:` / `materials:` blocks register custom entries.
-- Stopping power is evaluated at the beam's *initial* kinetic energy;
-  no step-wise integration of `dT/dx = -S(T(x))` yet (planned for
-  v0.2, in the `transport` submodule).
-- `transport` / `range` / `emulsion` submodules are **not** in v0.1.
+- Stopping power evaluated at the beam's *initial* kinetic energy
+  (single-point); see v0.2 for integrated energy loss.
+
+### v0.2
+
+- **`transport` submodule**: step-wise RK4 integration of
+  `dT/d(rho x) = -S(T)` along grammage. Independent of how a thickness
+  is expressed (linear vs grammage). Particles that drop below a
+  threshold are flagged as `stopped`.
+- **Layer stacks** via YAML `target.layers: [...]` — the loader keeps
+  back-compat with the v0.1 single-target form.
+- `propagate()` / `propagate_config()` return a `PropagationResult`
+  with per-layer breakdown, exit energy, total `dE` and `stopped`.
+
+### Still to come (v0.3+)
+
+- `range` (CSDA) and `RangeEnergyTable` for nuclear-emulsion work.
+- Density-effect / shell / Barkas / Bloch corrections; effective
+  charge; nuclear stopping.
+- Adaptive step control in the integrator.
 
 Caveats:
 
@@ -135,15 +153,44 @@ get_material("cu_window")
 For compounds and mixtures, specify `z_over_a` and `density_g_per_cm3`
 directly. `mean_excitation_energy_ev` is always required.
 
-### Verification plot
+### Multi-layer stacks
+
+```yaml
+# examples/configs/jparc_e10_stack.yaml
+beam:
+  particle: pion-
+  momentum: 1.2
+  momentum_unit: GeV/c
+target:
+  layers:
+    - material: kapton          # entrance window
+      thickness: 50.0
+      thickness_unit: um
+    - material: air             # gap between window and target
+      thickness: 5.0
+      thickness_unit: cm
+    - material: Be              # 9Be target
+      mass_thickness: 3.5
+      mass_thickness_unit: g/cm^2
+```
+
+`propagate_config(cfg)` integrates the energy loss layer by layer
+(RK4 along grammage) and returns per-layer `PropagationResult` info.
+
+### Verification plots
 
 ```bash
 python examples/plot_verification.py
 ```
 
-writes `examples/figures/{stopping_power_curves,jparc_e10_marker}.png`
-showing the Bethe curve on 9Be for proton / π⁻ / K⁻ and the J-PARC E10
-working points overlaid.
+writes three figures under `examples/figures/`:
+
+- `stopping_power_curves.png` — Bethe curve on 9Be for p / π⁻ / K⁻.
+- `jparc_e10_marker.png` — J-PARC E10 working points overlaid.
+- `transport_vs_linear.png` — RK4-integrated vs single-point linear
+  ΔE through 9Be vs grammage for proton beams at 100 / 500 / 2000 MeV.
+  Curves agree for thin grammage and diverge once ΔE/T₀ becomes
+  appreciable.
 
 ## Notes on numerical values
 

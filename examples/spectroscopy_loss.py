@@ -1,4 +1,8 @@
-"""Run a stopping-power calculation from a YAML config.
+"""Run a stopping-power / energy-loss calculation from a YAML config.
+
+Reports the step-wise RK4 integrated energy loss for each layer and the
+single-point linear approximation, so the difference between the two is
+visible.
 
 Usage:
     python examples/spectroscopy_loss.py <config.yaml> [<config.yaml> ...]
@@ -17,39 +21,50 @@ if str(_REPO_ROOT) not in sys.path:
 
 from energy_loss import (  # noqa: E402
   Config,
-  compute_linear_stopping_power,
-  compute_mass_stopping_power,
   load_config,
+  propagate_config,
 )
+from energy_loss.stopping.models import mass_stopping_power  # noqa: E402
 
 
 def _report(cfg: Config) -> None:
   beam = cfg.beam
   target = cfg.target
-  mat = target.material
-  s_mass = compute_mass_stopping_power(cfg)
-  s_lin = compute_linear_stopping_power(cfg)
+  result = propagate_config(cfg)
 
   print(f"=== {cfg.source_path.name if cfg.source_path else 'config'} ===")
   print(
     f"  beam   : {beam.particle.name}, p = {beam.momentum_mev_c / 1000.0:.4f} GeV/c, "
-    f"T = {beam.kinetic_energy_mev:.2f} MeV"
+    f"T = {beam.kinetic_energy_mev:.3f} MeV"
   )
   print(
-    f"  target : {mat.name}, rho = {mat.density_g_per_cm3:.4f} g/cm^3"
+    f"  target : {len(target.layers)} layer(s), "
+    f"total grammage = {target.total_mass_thickness_g_per_cm2:.4f} g/cm^2"
   )
-  if target.thickness_cm is not None:
+  for i, lr in enumerate(result.per_layer):
+    layer = lr.layer
     print(
-      f"           thickness = {target.thickness_cm:.4f} cm, "
-      f"grammage = {target.mass_thickness_g_per_cm2:.4f} g/cm^2"
+      f"    [{i}] {layer.material.name:<22s} "
+      f"x={layer.thickness_cm:.4e} cm  "
+      f"rho*x={layer.mass_thickness_g_per_cm2:.4e} g/cm^2  "
+      f"T: {lr.entry_kinetic_energy_mev:.3f} -> {lr.exit_kinetic_energy_mev:.3f}  "
+      f"dE={lr.energy_loss_mev:.4f} MeV"
+      + ("  [STOPPED]" if lr.stopped_in_layer else "")
     )
-  print(f"  mass dE/dx   : {s_mass:.4f} MeV cm^2 / g")
-  print(f"  linear dE/dx : {s_lin:.4f} MeV / cm")
-  if target.mass_thickness_g_per_cm2 is not None:
-    de = s_mass * target.mass_thickness_g_per_cm2
-    print(
-      f"  ~mean dE     : {de:.4f} MeV  (linear approx., grammage * mass dE/dx)"
-    )
+
+  # Per-layer single-point approximation: sum_i S_i(T_in) * (rho*x)_i.
+  # Compares well with the integrator only when dE/T_in is small.
+  linear = sum(
+    mass_stopping_power(beam.particle, beam.kinetic_energy_mev, layer.material)
+    * layer.mass_thickness_g_per_cm2
+    for layer in target.layers
+  )
+
+  total = result.total_energy_loss_mev
+  print(f"  integrated total dE  : {total:.4f} MeV "
+        f"(T_exit = {result.exit_kinetic_energy_mev:.3f} MeV)")
+  print(f"  linear approx (sum S_i(T_in)*rho*x_i): {linear:.4f} MeV "
+        f"(diff = {linear - total:+.4f} MeV)")
   print()
 
 

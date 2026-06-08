@@ -1,0 +1,21 @@
+# J-PARC E10 setup with the full beam-line stack in front of the Be
+# target: pi- 1.2 GeV/c through a kapton window, an air gap and finally
+# the 9Be target. Useful for demonstrating the layer-stack feature and
+# how the small upstream materials contribute compared with the target.
+
+beam:
+  particle: pion-
+  momentum: 1.2
+  momentum_unit: GeV/c
+
+target:
+  layers:
+    - material: kapton          # entrance window
+      thickness: 50.0
+      thickness_unit: um
+    - material: air             # gap between window and target
+      thickness: 5.0
+      thickness_unit: cm
+    - material: Be              # main 9Be target
+      mass_thickness: 3.5
+      mass_thickness_unit: g/cm^2

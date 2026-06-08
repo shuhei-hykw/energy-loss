@@ -1,16 +1,22 @@
-"""Verification plot for the Bethe stopping-power implementation.
+"""Verification plots for the Bethe + RK4-transport implementation.
 
-Renders two figures into ``examples/figures/``:
+Renders three figures into ``examples/figures/``:
 
 1. ``stopping_power_curves.png``
    Mass stopping power vs kinetic energy for proton / pi- / K- on a
-   9Be target. Compares the qualitative shape (1/beta^2 rise at low T,
-   broad MIP near beta*gamma ~ 3) against expectation.
+   9Be target.
 
 2. ``jparc_e10_marker.png``
-   Same curves but with the J-PARC E10 beam working points
-   (pi- 1.2 GeV/c, K- 1.5 GeV/c) marked, plus the mean energy loss
-   through 3.5 g/cm^2 of 9Be annotated.
+   Same curves with the J-PARC E10 working points (pi- 1.2 GeV/c,
+   K- 1.5 GeV/c) marked, plus the integrated mean energy loss through
+   3.5 g/cm^2 of 9Be annotated.
+
+3. ``transport_vs_linear.png``
+   Integrated dE through Be as a function of grammage (RK4) compared
+   with the single-point linear approximation S(T_in) * rho*x, for
+   proton beams at three different initial kinetic energies. The
+   linear curve diverges from the integrator once dE/T_in becomes
+   appreciable.
 
 Run from the repo root:
 
@@ -32,7 +38,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(_REPO_ROOT))
 
-from energy_loss import get_particle, load_config  # noqa: E402
+from energy_loss import Layer, get_particle, load_config, propagate  # noqa: E402
 from energy_loss.config import compute_mass_stopping_power  # noqa: E402
 from energy_loss.stopping import bethe_mass_stopping_power  # noqa: E402
 
@@ -139,9 +145,48 @@ def plot_jparc_e10_marker() -> Path:
   return out
 
 
+def plot_transport_vs_linear() -> Path:
+  """Integrated dE vs linear approximation as grammage grows."""
+  import warnings as _w
+
+  fig, ax = plt.subplots(figsize=(8.0, 5.0))
+  energies_mev = [100.0, 500.0, 2000.0]
+  colors = ["C0", "C1", "C2"]
+  grammages = np.geomspace(1.0e-3, 50.0, num=40)
+  for t0, color in zip(energies_mev, colors, strict=True):
+    integ = np.empty_like(grammages)
+    linear = np.empty_like(grammages)
+    s0 = bethe_mass_stopping_power("proton", t0, "Be")
+    with _w.catch_warnings():
+      _w.simplefilter("ignore", category=UserWarning)
+      for i, xi in enumerate(grammages):
+        layers = [Layer.from_mass_thickness("Be", float(xi))]
+        r = propagate("proton", t0, layers)
+        integ[i] = r.total_energy_loss_mev
+        linear[i] = s0 * xi
+    ax.loglog(grammages, integ, "-", color=color,
+              label=f"integrated, T$_0$={t0:.0f} MeV")
+    ax.loglog(grammages, linear, "--", color=color, alpha=0.7,
+              label=f"linear S(T$_0$)$\\cdot \\rho x$, T$_0$={t0:.0f} MeV")
+  ax.set_xlabel(r"grammage $\rho x$ [g/cm$^2$]")
+  ax.set_ylabel(r"$\Delta E$ [MeV]")
+  ax.set_title("RK4-integrated vs single-point dE through 9Be (proton beam)")
+  ax.grid(True, which="both", linestyle=":", alpha=0.6)
+  ax.legend(fontsize=9, loc="upper left")
+  fig.tight_layout()
+  out = FIG_DIR / "transport_vs_linear.png"
+  fig.savefig(out, dpi=150)
+  plt.close(fig)
+  return out
+
+
 def main() -> int:
   FIG_DIR.mkdir(exist_ok=True)
-  paths = [plot_stopping_curves(), plot_jparc_e10_marker()]
+  paths = [
+    plot_stopping_curves(),
+    plot_jparc_e10_marker(),
+    plot_transport_vs_linear(),
+  ]
   print("Wrote:")
   for p in paths:
     print(f"  {p.relative_to(_REPO_ROOT)}")

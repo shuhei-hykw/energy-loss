@@ -21,3 +21,9 @@ beam:
 
 target:
   material: my_emulsion_2024
+  thickness: 50.0
+  thickness_unit: um
+  # NB: basic Bethe is not trustworthy in this regime (low-beta*gamma).
+  # The integrator will still produce a finite exit energy because the
+  # formula clamps to zero at very low velocity; for real short-range
+  # emulsion work, use a table-based stopping model (planned v0.3).
