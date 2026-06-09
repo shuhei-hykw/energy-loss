@@ -12,6 +12,13 @@ Internal unit convention (used everywhere unless stated otherwise):
 Public API re-exports the most commonly used objects.
 """
 
+from energy_loss.api import (
+  compare_energy_from_range,
+  compare_range_from_energy,
+  energy_from_range,
+  load_table,
+  range_from_energy,
+)
 from energy_loss.config import (
   Beam,
   Config,
@@ -32,6 +39,7 @@ from energy_loss.materials import (
   list_materials,
   load_materials_from_yaml,
 )
+from energy_loss.models import list_models
 from energy_loss.particles import (
   Particle,
   get_particle,
@@ -57,19 +65,25 @@ __all__ = [
   "RangeEnergyTable",
   "RangeEnergyTableMetadata",
   "Target",
+  "compare_energy_from_range",
+  "compare_range_from_energy",
   "compute_linear_stopping_power",
   "compute_mass_stopping_power",
   "energy_from_emulsion_range",
+  "energy_from_range",
   "get_emulsion_range_energy",
   "get_material",
   "get_particle",
   "list_bundled_emulsion_tables",
   "list_materials",
+  "list_models",
   "list_particles",
   "load_config",
   "load_materials_from_yaml",
+  "load_table",
   "propagate",
   "propagate_config",
+  "range_from_energy",
   "register_particle",
 ]
 

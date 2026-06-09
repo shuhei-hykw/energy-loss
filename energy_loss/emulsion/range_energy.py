@@ -1,60 +1,47 @@
-"""Default range-energy tables for nuclear emulsion.
+"""Thin shim around the model registry for emulsion convenience access.
 
-The bundled tables come from NIST PSTAR/ASTAR for "Photographic
-Emulsion" (matno=215). See the CSV headers under
-``energy_loss/data/nist/`` for source URLs, density, composition and
-the date the data was fetched. Future v0.x can replace these defaults
-with experiment-specific calibrations without changing the API.
+The v0.3 API (``energy_from_emulsion_range`` / ``get_emulsion_range_energy``)
+is preserved for back-compatibility, but everything now routes through
+:mod:`energy_loss.models.registry`. New code should prefer the general
+:func:`energy_loss.api.energy_from_range`.
 """
 
 from __future__ import annotations
 
-from importlib import resources
-from pathlib import Path
-
+from energy_loss.models.registry import (
+  AUTO_POLICY,
+  list_models,
+  load_table,
+)
 from energy_loss.range.table import RangeEnergyTable
 from energy_loss.units import length_to_cm
 
-_BUNDLED: dict[str, str] = {
-  "proton": "pstar_photographic_emulsion.csv",
-  "alpha": "astar_photographic_emulsion.csv",
-}
-
-_CACHE: dict[str, RangeEnergyTable] = {}
-
 
 def list_bundled_emulsion_tables() -> list[str]:
-  """Particle keys for which v0.3 bundles a default emulsion table."""
-  return sorted(_BUNDLED)
+  """Particles for which a bundled NIST table exists for nuclear_emulsion."""
+  out: set[str] = set()
+  for p in AUTO_POLICY:
+    if AUTO_POLICY[p] in list_models(particle=p, material="nuclear_emulsion"):
+      out.add(p)
+  return sorted(out)
 
 
 def get_emulsion_range_energy(particle: str) -> RangeEnergyTable:
-  """Return the default :class:`RangeEnergyTable` for ``particle``.
-
-  Currently supported: ``"proton"`` (PSTAR) and ``"alpha"`` (ASTAR).
-  """
-  key = particle.lower()
-  if key in _CACHE:
-    return _CACHE[key]
+  """Return the default nuclear-emulsion table for ``particle``."""
   try:
-    fname = _BUNDLED[key]
-  except KeyError as exc:
+    return load_table(particle=particle, material="nuclear_emulsion", model="auto")
+  except ValueError as exc:
     raise ValueError(
       f"No bundled emulsion range-energy table for particle {particle!r}. "
       f"Available: {list_bundled_emulsion_tables()}."
     ) from exc
-  res = resources.files("energy_loss.data").joinpath("nist", fname)
-  with resources.as_file(res) as path:
-    table = RangeEnergyTable.from_nist_csv(Path(path))
-  _CACHE[key] = table
-  return table
 
 
 def energy_from_emulsion_range(
   particle: str, range_value: float, range_unit: str = "um",
   table: RangeEnergyTable | None = None,
 ) -> float:
-  """Estimate kinetic energy [MeV] from a measured emulsion track length.
+  """Kinetic energy [MeV] for an emulsion track of ``range_value`` ``range_unit``.
 
   By default uses the bundled NIST table for ``particle``; pass an
   explicit ``table`` to use a different calibration.

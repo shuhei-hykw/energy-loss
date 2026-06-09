@@ -129,20 +129,17 @@ class RangeEnergyTable:
     """
     path = Path(path)
     meta = _parse_nist_header(path)
-    # Header lines start with '#', and there's exactly one non-comment
-    # column-name row before the numeric data. loadtxt with comments
-    # only skips '#' lines, so we manually skip the column-name line.
+    rows: list[list[float]] = []
     with open(path, encoding="utf-8") as f:
-      data_lines = [ln for ln in f if not ln.startswith("#") and "," in ln]
-    if data_lines and not data_lines[0].split(",", 1)[0].strip().replace(
-      ".", "", 1
-    ).replace("e", "", 1).replace("E", "", 1).replace(
-      "-", "", 1
-    ).replace("+", "", 1).isdigit():
-      data_lines = data_lines[1:]
-    data = np.array(
-      [[float(v) for v in ln.split(",")] for ln in data_lines]
-    )
+      for line in f:
+        if line.startswith("#") or "," not in line:
+          continue
+        try:
+          rows.append([float(v) for v in line.split(",")])
+        except ValueError:
+          # Column-name row — skip it.
+          continue
+    data = np.asarray(rows, dtype=float)
     if data.ndim != 2 or data.shape[1] < 5:
       raise ValueError(
         f"{path}: expected at least 5 numeric columns "

@@ -5,7 +5,7 @@
 # Density [g/cm^3]: 3.81500
 # Mean excitation energy I [eV]: 331.000
 # Composition (weight fraction): H=0.014100, C=0.072261, N=0.019320, O=0.066101, S=0.001890, Br=0.349103, Ag=0.474105, I=0.003120
-# Fetched: 2026-06-09 via scripts/fetch_nist_emulsion.py
+# Fetched: 2026-06-09 via tools/fetch_nist_tables.py
 # Columns: T_MeV, S_elec_MeV_cm2_per_g, S_nuc_MeV_cm2_per_g, S_total_MeV_cm2_per_g, R_csda_g_per_cm2, R_proj_g_per_cm2, detour_factor
 T_MeV,S_elec_MeV_cm2_per_g,S_nuc_MeV_cm2_per_g,S_total_MeV_cm2_per_g,R_csda_g_per_cm2,R_proj_g_per_cm2,detour_factor
 1.000000e-03,4.669000e+01,5.085000e+01,9.754000e+01,1.271000e-05,3.397000e-06,2.673000e-01

@@ -54,11 +54,25 @@ Two main use cases:
   Photographic Emulsion (matno=215) bundled as CSV under
   `energy_loss/data/nist/`. Each CSV's header records source URL,
   density, mean excitation energy, NIST composition and *fetch date*,
-  so the data version is always traceable. Regenerate with
-  `scripts/fetch_nist_emulsion.py`.
+  so the data version is always traceable.
 - Built-in particles extended: `alpha`, `deuteron`, `triton`, `helion`
   (masses from `scipy.constants`).
-- `energy_from_emulsion_range(particle, length, unit)` convenience.
+
+### v0.3.1
+
+- Top-level **`energy_from_range`** / **`range_from_energy`** /
+  **`compare_energy_from_range`** / **`load_table`** as named by
+  `scope.md`, with explicit `model="auto"` / `"nist_pstar"` /
+  `"nist_astar"` selection backed by a particle-material-model
+  registry (`energy_loss.models`).
+- `model="auto"` resolves to `nist_pstar` for protons and `nist_astar`
+  for alphas; unknown particle / material / model triples raise a
+  clear error rather than silently falling back.
+- Fetcher script renamed `scripts/fetch_nist_emulsion.py` →
+  **`tools/fetch_nist_tables.py`**, generalised to drive multiple
+  `(program, matno, particle)` jobs out of one composition fetch.
+- `from_nist_csv` parser tightened (no chained `.replace().isdigit()`
+  heuristics).
 
 ### Still to come
 
@@ -192,37 +206,52 @@ target:
 `propagate_config(cfg)` integrates the energy loss layer by layer
 (RK4 along grammage) and returns per-layer `PropagationResult` info.
 
-### Nuclear emulsion (range → energy, v0.3)
+### Range ↔ energy (top-level API, v0.3.1)
 
-```bash
-python examples/emulsion_range_to_energy.py alpha 28
-# alpha track 28.0 um in nuclear emulsion:
-#   -> T_kin = 5.93 MeV
-#   table source : https://physics.nist.gov/PhysRefData/Star/Text/ASTAR.html
-#   material     : Photographic Emulsion (rho=3.815 g/cm^3, I=331.0 eV)
-#   fetched      : 2026-06-09
+```python
+from energy_loss import energy_from_range, range_from_energy
+
+# Auto model selection per scope.md: proton -> NIST PSTAR, alpha -> NIST ASTAR.
+t = energy_from_range("proton", "nuclear_emulsion", range_um=35.2)   # MeV
+r = range_from_energy("alpha", "nuclear_emulsion", energy_mev=5.486) # um
 ```
 
 ```python
-from energy_loss import energy_from_emulsion_range, get_emulsion_range_energy
+from energy_loss import compare_energy_from_range, list_models
 
-t = energy_from_emulsion_range("proton", 10.0, "um")    # ~0.80 MeV
+print(list_models(particle="proton", material="nuclear_emulsion"))
+# ['nist_pstar']
 
-table = get_emulsion_range_energy("alpha")
-# r [g/cm^2] = table.range_from_energy(5.0)
-# t [MeV]   = table.energy_from_range(r)
+compare_energy_from_range(
+    "proton", "nuclear_emulsion",
+    range_um=35.2,
+    models=["nist_pstar"],     # add "srim" / "geant4_*" once registered
+)
+# {'unit': 'MeV', 'nist_pstar': 1.829}
+```
+
+Other inputs / output units are first-class:
+
+```python
+energy_from_range("proton", "nuclear_emulsion",
+                  range_value=10e-3, range_unit="mm",
+                  energy_unit="keV")
 ```
 
 Bundled tables live at `energy_loss/data/nist/*.csv` with full
 provenance headers (source URL, density, I, composition, fetch date).
-To regenerate against the current NIST data:
+Regenerate / extend them via
 
 ```bash
-python scripts/fetch_nist_emulsion.py
+python tools/fetch_nist_tables.py
 ```
 
 For experiment-specific emulsions, load your own calibration CSV via
 `RangeEnergyTable.from_nist_csv(path)` or `from_arrays(T, R)`.
+
+The v0.3 helpers `energy_from_emulsion_range` /
+`get_emulsion_range_energy` are kept as thin shims over the same
+registry for back-compat.
 
 ### Verification plots
 

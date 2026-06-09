@@ -1,18 +1,23 @@
-"""Fetch PSTAR and ASTAR tables for Photographic Emulsion (matno=215)
-from NIST and convert them into CSV with a documented header.
+"""Fetch NIST PSTAR/ASTAR tables and convert them into the package CSV format.
 
-This script is run only when the bundled tables need to be regenerated
-or extended. The resulting CSV files are committed to
-``energy_loss/data/nist/``; ``pip`` users do *not* need to run this
-script. The reason we keep it in the repo is to make the provenance of
-the bundled data fully reproducible.
+The script POSTs to the NIST STAR form and writes one CSV per
+``(program, material)`` pair into ``energy_loss/data/nist/``. Each CSV
+carries a metadata header (source URL, density, mean excitation
+energy, composition, fetch date) so the data version is reproducible.
+
+By default it regenerates the bundled v0.3 tables (Photographic
+Emulsion, matno=215, for both PSTAR and ASTAR). To add a new material,
+extend ``_DEFAULT_JOBS`` below or invoke the module functions directly.
+
+This script is *not* required to use the package; ``pip install`` users
+get the bundled CSVs untouched. It lives in the repo so the bundled
+data's provenance is fully reproducible.
 
 Sources (public domain, NIST PML)
 - PSTAR: https://physics.nist.gov/PhysRefData/Star/Text/PSTAR.html
 - ASTAR: https://physics.nist.gov/PhysRefData/Star/Text/ASTAR.html
 
-ICRU Reports 49 and 73 underlie PSTAR and ASTAR respectively. The
-"Photographic Emulsion" predefined material is matno=215 in both.
+ICRU Reports 49 and 73 underlie PSTAR and ASTAR respectively.
 """
 
 from __future__ import annotations
@@ -107,7 +112,7 @@ def _write_csv(
     f"# Mean excitation energy I [eV]: {i_ev:.3f}",
     "# Composition (weight fraction): "
     + ", ".join(f"{k}={v:.6f}" for k, v in composition.items()),
-    f"# Fetched: {today} via scripts/fetch_nist_emulsion.py",
+    f"# Fetched: {today} via tools/fetch_nist_tables.py",
     "# Columns: T_MeV, S_elec_MeV_cm2_per_g, S_nuc_MeV_cm2_per_g, "
     "S_total_MeV_cm2_per_g, R_csda_g_per_cm2, R_proj_g_per_cm2, detour_factor",
     "T_MeV,S_elec_MeV_cm2_per_g,S_nuc_MeV_cm2_per_g,"
@@ -115,6 +120,16 @@ def _write_csv(
   ]
   body = "\n".join(",".join(f"{v:.6e}" for v in r) for r in rows)
   out_path.write_text("\n".join(header_lines) + "\n" + body + "\n")
+
+
+# One row of _DEFAULT_JOBS = (prog, matno, particle, material_label, output_filename).
+# Extend this to add new materials when going past v0.3.
+_DEFAULT_JOBS: list[tuple[str, int, str, str, str]] = [
+  ("PSTAR", 215, "proton", "Photographic Emulsion",
+   "pstar_photographic_emulsion.csv"),
+  ("ASTAR", 215, "alpha", "Photographic Emulsion",
+   "astar_photographic_emulsion.csv"),
+]
 
 
 def main() -> int:
@@ -128,13 +143,15 @@ def main() -> int:
   out_dir = Path(args.out_dir)
   out_dir.mkdir(parents=True, exist_ok=True)
 
-  matno = 215  # Photographic Emulsion
-  density, i_ev, composition = _fetch_composition(matno)
-  for prog, particle, fname in [
-    ("PSTAR", "proton", "pstar_photographic_emulsion.csv"),
-    ("ASTAR", "alpha", "astar_photographic_emulsion.csv"),
-  ]:
-    print(f"Fetching {prog} for matno={matno} ...", file=sys.stderr)
+  # Group jobs by matno so we only fetch the composition once per material.
+  matno_to_meta: dict[int, tuple[float, float, dict[str, float]]] = {}
+  for _, matno, _, _, _ in _DEFAULT_JOBS:
+    if matno not in matno_to_meta:
+      matno_to_meta[matno] = _fetch_composition(matno)
+
+  for prog, matno, particle, _material_label, fname in _DEFAULT_JOBS:
+    density, i_ev, composition = matno_to_meta[matno]
+    print(f"Fetching {prog} for matno={matno} ({particle}) ...", file=sys.stderr)
     html = _post_table(prog, matno)
     rows = _parse_table_rows(html)
     if not rows:
