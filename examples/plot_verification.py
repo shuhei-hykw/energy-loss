@@ -1,6 +1,6 @@
-"""Verification plots for the Bethe + RK4-transport implementation.
+"""Verification plots for the energy-loss package.
 
-Renders three figures into ``examples/figures/``:
+Renders four figures into ``examples/figures/``:
 
 1. ``stopping_power_curves.png``
    Mass stopping power vs kinetic energy for proton / pi- / K- on a
@@ -14,9 +14,13 @@ Renders three figures into ``examples/figures/``:
 3. ``transport_vs_linear.png``
    Integrated dE through Be as a function of grammage (RK4) compared
    with the single-point linear approximation S(T_in) * rho*x, for
-   proton beams at three different initial kinetic energies. The
-   linear curve diverges from the integrator once dE/T_in becomes
-   appreciable.
+   proton beams at three different initial kinetic energies.
+
+4. ``pstar_vs_bethe_emulsion.png``
+   v0.3 — Range-energy relation for proton/alpha in nuclear emulsion.
+   Compares the bundled NIST PSTAR/ASTAR tables against a Bethe-only
+   CSDA computed inline. They agree well above ~10 MeV and diverge at
+   low energy where the basic Bethe formula leaves its validity range.
 
 Run from the repo root:
 
@@ -38,7 +42,13 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(_REPO_ROOT))
 
-from energy_loss import Layer, get_particle, load_config, propagate  # noqa: E402
+from energy_loss import (  # noqa: E402
+  Layer,
+  get_emulsion_range_energy,
+  get_particle,
+  load_config,
+  propagate,
+)
 from energy_loss.config import compute_mass_stopping_power  # noqa: E402
 from energy_loss.stopping import bethe_mass_stopping_power  # noqa: E402
 
@@ -180,12 +190,68 @@ def plot_transport_vs_linear() -> Path:
   return out
 
 
+def _bethe_csda_range_emulsion(
+  particle: str, t_mev: float, t_min_mev: float = 1.0,
+) -> float:
+  """Bethe-only CSDA range [g/cm^2] for ``particle`` in nuclear_emulsion.
+
+  Numerically integrates ``R = int_{T_min}^{T0} dT / S(T)`` using
+  Simpson's rule on a log grid. ``T_min`` defaults to 1 MeV — basic
+  Bethe is unreliable below that and the integral diverges at T -> 0.
+  """
+  import warnings as _w
+
+  n = 256
+  ts = np.geomspace(t_min_mev, t_mev, num=n)
+  with _w.catch_warnings():
+    _w.simplefilter("ignore", category=UserWarning)
+    inv_s = np.array(
+      [1.0 / bethe_mass_stopping_power(particle, float(t), "nuclear_emulsion")
+       for t in ts]
+    )
+  return float(np.trapezoid(inv_s, ts))
+
+
+def plot_pstar_vs_bethe_emulsion() -> Path:
+  fig, ax = plt.subplots(figsize=(8.0, 5.0))
+  for particle, color in [
+    ("proton", "C0"),
+    ("alpha", "C1"),
+  ]:
+    table = get_emulsion_range_energy(particle)
+    rho = table.metadata.density_g_per_cm3 or 3.815
+    t_pstar = table.kinetic_energy_mev
+    r_pstar_um = table.range_csda_g_per_cm2 / rho * 1.0e4
+    # Bethe-only CSDA for the same energy grid (cap low end at 1 MeV).
+    t_bethe = t_pstar[t_pstar >= 1.0]
+    r_bethe_um = np.array(
+      [_bethe_csda_range_emulsion(particle, float(t)) / rho * 1.0e4
+       for t in t_bethe]
+    )
+    ax.loglog(t_pstar, r_pstar_um, "-", color=color,
+              label=f"{particle} NIST {('PSTAR' if particle == 'proton' else 'ASTAR')}")
+    ax.loglog(t_bethe, r_bethe_um, "--", color=color, alpha=0.7,
+              label=f"{particle} basic Bethe CSDA (this lib)")
+  ax.set_xlabel("kinetic energy [MeV]")
+  ax.set_ylabel(r"CSDA range in nuclear emulsion [$\mu$m]")
+  ax.set_title("Range-energy in nuclear emulsion: NIST tables vs basic Bethe")
+  ax.grid(True, which="both", linestyle=":", alpha=0.6)
+  ax.legend(fontsize=9, loc="upper left")
+  ax.set_xlim(1.0e-2, 1.0e4)
+  fig.tight_layout()
+  out = FIG_DIR / "pstar_vs_bethe_emulsion.png"
+  fig.savefig(out, dpi=150)
+  plt.close(fig)
+  return out
+
+
 def main() -> int:
   FIG_DIR.mkdir(exist_ok=True)
   paths = [
     plot_stopping_curves(),
     plot_jparc_e10_marker(),
     plot_transport_vs_linear(),
+    plot_pstar_vs_bethe_emulsion(),
   ]
   print("Wrote:")
   for p in paths:

@@ -46,11 +46,26 @@ Two main use cases:
 - `propagate()` / `propagate_config()` return a `PropagationResult`
   with per-layer breakdown, exit energy, total `dE` and `stopped`.
 
-### Still to come (v0.3+)
+### v0.3
 
-- `range` (CSDA) and `RangeEnergyTable` for nuclear-emulsion work.
-- Density-effect / shell / Barkas / Bloch corrections; effective
-  charge; nuclear stopping.
+- **`range.RangeEnergyTable`**: generic tabulated range-energy relation
+  with log-log interpolation in both directions.
+- **`emulsion` submodule** with NIST **PSTAR/ASTAR** tables for
+  Photographic Emulsion (matno=215) bundled as CSV under
+  `energy_loss/data/nist/`. Each CSV's header records source URL,
+  density, mean excitation energy, NIST composition and *fetch date*,
+  so the data version is always traceable. Regenerate with
+  `scripts/fetch_nist_emulsion.py`.
+- Built-in particles extended: `alpha`, `deuteron`, `triton`, `helion`
+  (masses from `scipy.constants`).
+- `energy_from_emulsion_range(particle, length, unit)` convenience.
+
+### Still to come
+
+- Geant4-backed range / stopping (third leg of the model trio after
+  Bethe and tabulated PSTAR/ASTAR).
+- Density-effect / shell / Barkas / Bloch corrections in the analytic
+  formula; effective charge; nuclear stopping.
 - Adaptive step control in the integrator.
 
 Caveats:
@@ -177,20 +192,55 @@ target:
 `propagate_config(cfg)` integrates the energy loss layer by layer
 (RK4 along grammage) and returns per-layer `PropagationResult` info.
 
+### Nuclear emulsion (range → energy, v0.3)
+
+```bash
+python examples/emulsion_range_to_energy.py alpha 28
+# alpha track 28.0 um in nuclear emulsion:
+#   -> T_kin = 5.93 MeV
+#   table source : https://physics.nist.gov/PhysRefData/Star/Text/ASTAR.html
+#   material     : Photographic Emulsion (rho=3.815 g/cm^3, I=331.0 eV)
+#   fetched      : 2026-06-09
+```
+
+```python
+from energy_loss import energy_from_emulsion_range, get_emulsion_range_energy
+
+t = energy_from_emulsion_range("proton", 10.0, "um")    # ~0.80 MeV
+
+table = get_emulsion_range_energy("alpha")
+# r [g/cm^2] = table.range_from_energy(5.0)
+# t [MeV]   = table.energy_from_range(r)
+```
+
+Bundled tables live at `energy_loss/data/nist/*.csv` with full
+provenance headers (source URL, density, I, composition, fetch date).
+To regenerate against the current NIST data:
+
+```bash
+python scripts/fetch_nist_emulsion.py
+```
+
+For experiment-specific emulsions, load your own calibration CSV via
+`RangeEnergyTable.from_nist_csv(path)` or `from_arrays(T, R)`.
+
 ### Verification plots
 
 ```bash
 python examples/plot_verification.py
 ```
 
-writes three figures under `examples/figures/`:
+writes four figures under `examples/figures/`:
 
 - `stopping_power_curves.png` — Bethe curve on 9Be for p / π⁻ / K⁻.
 - `jparc_e10_marker.png` — J-PARC E10 working points overlaid.
 - `transport_vs_linear.png` — RK4-integrated vs single-point linear
-  ΔE through 9Be vs grammage for proton beams at 100 / 500 / 2000 MeV.
-  Curves agree for thin grammage and diverge once ΔE/T₀ becomes
-  appreciable.
+  ΔE through 9Be vs grammage.
+- `pstar_vs_bethe_emulsion.png` — NIST PSTAR/ASTAR tables compared
+  with this library's basic Bethe CSDA for protons and alphas in
+  nuclear emulsion. They agree at high energy and diverge at low
+  energy, which is exactly where PSTAR/ASTAR (incorporating shell
+  and Barkas corrections) should be used instead of plain Bethe.
 
 ## Notes on numerical values
 

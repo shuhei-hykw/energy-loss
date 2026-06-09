@@ -29,7 +29,7 @@ include = ["energy_loss*"]
 exclude = ["tests*", "examples*"]
 
 [tool.setuptools.package-data]
-energy_loss = ["data/*.yaml"]
+energy_loss = ["data/*.yaml", "data/nist/*.csv"]
 
 [tool.ruff]
 line-length = 100

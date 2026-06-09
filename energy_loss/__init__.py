@@ -21,6 +21,11 @@ from energy_loss.config import (
   load_config,
   propagate_config,
 )
+from energy_loss.emulsion import (
+  energy_from_emulsion_range,
+  get_emulsion_range_energy,
+  list_bundled_emulsion_tables,
+)
 from energy_loss.materials import (
   Material,
   get_material,
@@ -33,6 +38,7 @@ from energy_loss.particles import (
   list_particles,
   register_particle,
 )
+from energy_loss.range import RangeEnergyTable, RangeEnergyTableMetadata
 from energy_loss.transport import (
   Layer,
   LayerResult,
@@ -48,11 +54,16 @@ __all__ = [
   "Material",
   "Particle",
   "PropagationResult",
+  "RangeEnergyTable",
+  "RangeEnergyTableMetadata",
   "Target",
   "compute_linear_stopping_power",
   "compute_mass_stopping_power",
+  "energy_from_emulsion_range",
+  "get_emulsion_range_energy",
   "get_material",
   "get_particle",
+  "list_bundled_emulsion_tables",
   "list_materials",
   "list_particles",
   "load_config",

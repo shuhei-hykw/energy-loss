@@ -1,0 +1,10 @@
+# A measured nuclear-emulsion track: 28 um of an alpha particle.
+# Po-214's 7.7 MeV alpha has a range of ~ 38 um in standard NIST
+# emulsion; Po-210's 5.3 MeV alpha is ~ 28 um. The script
+# `examples/emulsion_range_to_energy.py` reads this kind of measurement
+# and reports the inferred kinetic energy.
+
+track:
+  particle: alpha
+  range: 28.0
+  range_unit: um

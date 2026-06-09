@@ -21,6 +21,10 @@ def _mev(key: str) -> float:
 _ELECTRON_MEV = _mev("electron mass energy equivalent in MeV")
 _MUON_MEV = _mev("muon mass energy equivalent in MeV")
 _PROTON_MEV = _mev("proton mass energy equivalent in MeV")
+_DEUTERON_MEV = _mev("deuteron mass energy equivalent in MeV")
+_TRITON_MEV = _mev("triton mass energy equivalent in MeV")
+_HELION_MEV = _mev("helion mass energy equivalent in MeV")
+_ALPHA_MEV = _mev("alpha particle mass energy equivalent in MeV")
 
 # PDG 2024 (not in scipy.constants):
 #   pi+- : 139.57039 MeV/c^2
@@ -58,6 +62,10 @@ _PARTICLES: dict[str, Particle] = {
   "muon-": Particle("muon-", _MUON_MEV, -1),
   "electron": Particle("electron", _ELECTRON_MEV, -1),
   "positron": Particle("positron", _ELECTRON_MEV, +1),
+  "deuteron": Particle("deuteron", _DEUTERON_MEV, +1),
+  "triton": Particle("triton", _TRITON_MEV, +1),
+  "helion": Particle("helion", _HELION_MEV, +2),       # 3He nucleus
+  "alpha": Particle("alpha", _ALPHA_MEV, +2),           # 4He nucleus
 }
 
 _ALIASES: dict[str, str] = {
@@ -70,6 +78,10 @@ _ALIASES: dict[str, str] = {
   "mu-": "muon-",
   "e-": "electron",
   "e+": "positron",
+  "d": "deuteron",
+  "t": "triton",
+  "3He": "helion",
+  "4He": "alpha",
 }
 
 
