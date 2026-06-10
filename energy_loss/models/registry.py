@@ -223,3 +223,10 @@ for _material in ("aluminum", "carbon", "Be"):
       _particle, _material, GEANT4_MODEL_NAME,
       _geant4_factory(_particle, _material),
     )
+
+# Hadron beams for the J-PARC E10 9Be target comparison.
+for _particle in ("pion-", "pion+", "kaon-", "kaon+", "muon-", "muon+"):
+  register_table_factory(
+    _particle, "Be", GEANT4_MODEL_NAME,
+    _geant4_factory(_particle, "Be"),
+  )
