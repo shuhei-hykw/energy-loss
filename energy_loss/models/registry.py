@@ -54,6 +54,12 @@ AUTO_POLICY: dict[str, str] = {
   "alpha": "nist_astar",
 }
 
+# Geant4-derived models live under names like ``geant4_11_4_1``. The
+# tag the registry uses is set from this constant; we keep it as a name
+# so user code can request ``model="geant4"`` and the resolver maps it
+# to the bundled Geant4 backend automatically (similar to ``auto``).
+GEANT4_MODEL_NAME: str = "geant4_11_4_1"
+
 
 @dataclass(frozen=True)
 class ModelKey:
@@ -106,6 +112,8 @@ def resolve_model(particle: str, material: str, model: str) -> str:
         f"registered models for ({particle_c}, {material_c}): {available}. "
         "Pass an explicit model name."
       ) from exc
+  elif model == "geant4":
+    model = GEANT4_MODEL_NAME
   key = ModelKey(particle=particle_c, material=material_c, model=model)
   if key not in _REGISTRY:
     available = list_models(particle=particle_c, material=material_c)
@@ -166,3 +174,52 @@ register_table_factory(
   "alpha", "nuclear_emulsion", "nist_astar",
   _bundled_nist_factory("astar_photographic_emulsion.csv"),
 )
+
+
+# ---------------------------------------------------------------------------
+# Geant4 backend registration (lazy — does not call subprocess at import).
+# ---------------------------------------------------------------------------
+
+
+def _geant4_factory(
+  particle: str, material: str, emin_mev: float = 0.001,
+  emax_mev: float = 1.0e4, n_points: int = 200,
+) -> Callable[[], RangeEnergyTable]:
+  """Build a lazy factory that runs the Geant4 generator on first call."""
+
+  def factory() -> RangeEnergyTable:
+    # Imported here so importing the registry doesn't drag the backend
+    # dependency tree in. Raises Geant4Unavailable if the executable
+    # isn't built; resolve_model() reports that as a clear "not
+    # registered" once the registration is skipped.
+    from energy_loss.backends.geant4_runner import (
+      Geant4TableSpec,
+      generate_geant4_table,
+    )
+
+    spec = Geant4TableSpec(
+      particle=particle, material=material,
+      emin_mev=emin_mev, emax_mev=emax_mev,
+      n_points=n_points,
+    )
+    csv_path = generate_geant4_table(spec)
+    return RangeEnergyTable.from_nist_csv(csv_path)
+
+  return factory
+
+
+# Register Geant4 entries for the (particle, material) combinations the
+# C++ backend supports out of the box. The registration itself is just
+# wiring a factory function — the actual subprocess call only fires
+# when load_table() pulls the table on first use.
+for _particle in ("proton", "alpha", "deuteron", "triton", "helion"):
+  register_table_factory(
+    _particle, "nuclear_emulsion", GEANT4_MODEL_NAME,
+    _geant4_factory(_particle, "nuclear_emulsion"),
+  )
+for _material in ("aluminum", "carbon", "Be"):
+  for _particle in ("proton", "alpha"):
+    register_table_factory(
+      _particle, _material, GEANT4_MODEL_NAME,
+      _geant4_factory(_particle, _material),
+    )

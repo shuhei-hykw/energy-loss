@@ -74,13 +74,33 @@ Two main use cases:
 - `from_nist_csv` parser tightened (no chained `.replace().isdigit()`
   heuristics).
 
+### v0.4
+
+- **Geant4 backend** as the third model leg suggested by `scope.md`.
+  A small C++ CLI under `geant4/` (built separately with CMake) runs
+  `G4EmStandardPhysics_option4` and writes a CSV in the same format
+  the NIST loader already parses. The Python wrapper
+  (`energy_loss.backends.geant4_runner`) finds the executable, runs
+  it via `subprocess`, and caches the CSV under
+  `energy_loss/data/geant4/` keyed by a hash of the request.
+- `model="geant4"` resolves through the registry to the concrete
+  `geant4_11_4_1` entry; `compare_energy_from_range(..., models=[
+  "nist_pstar", "geant4"])` performs the head-to-head comparison.
+- New verification plot `three_legs_emulsion.png` shows NIST tables,
+  basic Bethe, and Geant4 on the same axes for proton and alpha in
+  nuclear emulsion (NIST and Geant4 overlap within ~1% above 1 MeV).
+- New built-in particles (`alpha`, `deuteron`, `triton`, `helion`)
+  are routed to Geant4 names via the runner.
+
 ### Still to come
 
-- Geant4-backed range / stopping (third leg of the model trio after
-  Bethe and tabulated PSTAR/ASTAR).
+- Setup YAML extension to drive `propagate_config` with a tabulated
+  stopping-power model (Geant4-backed transport).
+- SRIM / ATIMA table readers as additional registry entries.
+- Adaptive step control in the integrator.
+- `src/energy_loss/` layout move suggested by `scope.md`.
 - Density-effect / shell / Barkas / Bloch corrections in the analytic
   formula; effective charge; nuclear stopping.
-- Adaptive step control in the integrator.
 
 Caveats:
 
@@ -253,13 +273,41 @@ The v0.3 helpers `energy_from_emulsion_range` /
 `get_emulsion_range_energy` are kept as thin shims over the same
 registry for back-compat.
 
+### Geant4 backend (v0.4)
+
+```bash
+# Build the C++ generator once (requires Geant4 >= 11.4 + cmake + Qt).
+cmake -S geant4 -B geant4/build \
+      -DGeant4_DIR=$HOME/software/geant4/11.4.1/lib/Geant4-11.4.1
+cmake --build geant4/build -j
+
+# Generate a table from a YAML job.
+python examples/generate_geant4_table.py examples/configs/geant4_table.yaml
+```
+
+```python
+from energy_loss import compare_energy_from_range
+
+compare_energy_from_range(
+    "proton", "nuclear_emulsion",
+    range_um=35.2,
+    models=["nist_pstar", "geant4"],
+)
+# {'unit': 'MeV', 'nist_pstar': 1.829, 'geant4_11_4_1': 1.827}
+```
+
+The Geant4 backend is **optional** at install time; everything in the
+Python package still runs without it. When the executable is missing,
+the registry just doesn't advertise the `geant4_*` model and the
+3-leg verification plot quietly drops back to 2 legs.
+
 ### Verification plots
 
 ```bash
 python examples/plot_verification.py
 ```
 
-writes four figures under `examples/figures/`:
+writes five figures under `examples/figures/`:
 
 - `stopping_power_curves.png` — Bethe curve on 9Be for p / π⁻ / K⁻.
 - `jparc_e10_marker.png` — J-PARC E10 working points overlaid.
@@ -270,6 +318,10 @@ writes four figures under `examples/figures/`:
   nuclear emulsion. They agree at high energy and diverge at low
   energy, which is exactly where PSTAR/ASTAR (incorporating shell
   and Barkas corrections) should be used instead of plain Bethe.
+- `three_legs_emulsion.png` *(v0.4, requires Geant4 executable)* —
+  NIST, Bethe and Geant4 on the same axes. NIST and Geant4 overlap
+  within ~1% above 1 MeV; Bethe-only diverges at low energy as
+  expected. This is the `scope.md` 3-leg comparison realised.
 
 ## Notes on numerical values
 

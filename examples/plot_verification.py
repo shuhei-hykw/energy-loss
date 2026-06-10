@@ -22,6 +22,12 @@ Renders four figures into ``examples/figures/``:
    CSDA computed inline. They agree well above ~10 MeV and diverge at
    low energy where the basic Bethe formula leaves its validity range.
 
+5. ``three_legs_emulsion.png``
+   v0.4 — Same comparison plus the Geant4 backend (G4EmStandardPhysics_
+   option4). When the Geant4 generator is available, this is the
+   "3-leg" comparison anticipated by scope.md (analytical Bethe,
+   tabulated NIST, simulation-derived Geant4).
+
 Run from the repo root:
 
     python examples/plot_verification.py
@@ -46,7 +52,9 @@ from energy_loss import (  # noqa: E402
   Layer,
   get_emulsion_range_energy,
   get_particle,
+  list_models,
   load_config,
+  load_table,
   propagate,
 )
 from energy_loss.config import compute_mass_stopping_power  # noqa: E402
@@ -245,14 +253,79 @@ def plot_pstar_vs_bethe_emulsion() -> Path:
   return out
 
 
+def plot_three_legs_emulsion() -> Path | None:
+  """NIST + Bethe + Geant4: the scope.md 3-leg comparison.
+
+  Skipped (returns None) when the Geant4 backend executable isn't
+  built — the rest of the script still runs.
+  """
+  import warnings as _w
+
+  fig, ax = plt.subplots(figsize=(8.0, 5.0))
+  any_geant4 = False
+  for particle, color in [("proton", "C0"), ("alpha", "C1")]:
+    nist = get_emulsion_range_energy(particle)
+    rho = nist.metadata.density_g_per_cm3 or 3.815
+    ax.loglog(
+      nist.kinetic_energy_mev,
+      nist.range_csda_g_per_cm2 / rho * 1.0e4,
+      "-", color=color,
+      label=f"{particle} NIST "
+            f"{'PSTAR' if particle == 'proton' else 'ASTAR'}",
+    )
+    # Bethe-only CSDA on the same grid.
+    t_high = nist.kinetic_energy_mev[nist.kinetic_energy_mev >= 1.0]
+    r_bethe = np.array(
+      [_bethe_csda_range_emulsion(particle, float(t)) for t in t_high]
+    )
+    ax.loglog(t_high, r_bethe / rho * 1.0e4, "--", color=color, alpha=0.6,
+              label=f"{particle} basic Bethe CSDA")
+    # Geant4 (lazy via registry; skip on failure).
+    if "geant4_11_4_1" in list_models(
+      particle=particle, material="nuclear_emulsion",
+    ):
+      try:
+        g4 = load_table(particle, "nuclear_emulsion", "geant4")
+      except Exception as exc:  # noqa: BLE001
+        _w.warn(
+          f"Geant4 backend unavailable for {particle}: {exc}",
+          stacklevel=2,
+        )
+        continue
+      any_geant4 = True
+      ax.loglog(
+        g4.kinetic_energy_mev,
+        g4.range_csda_g_per_cm2 / rho * 1.0e4,
+        ":", color=color, linewidth=2.0,
+        label=f"{particle} Geant4 {g4.metadata.source.split('//')[-1]}",
+      )
+
+  ax.set_xlabel("kinetic energy [MeV]")
+  ax.set_ylabel(r"range in nuclear emulsion [$\mu$m]")
+  ax.set_title("Three-leg comparison: NIST tables / basic Bethe / Geant4")
+  ax.grid(True, which="both", linestyle=":", alpha=0.6)
+  ax.legend(fontsize=9, loc="upper left")
+  ax.set_xlim(1.0e-2, 1.0e4)
+  fig.tight_layout()
+  out = FIG_DIR / "three_legs_emulsion.png"
+  fig.savefig(out, dpi=150)
+  plt.close(fig)
+  if not any_geant4:
+    print("  (note: Geant4 backend not available; figure has 2 legs)")
+  return out
+
+
 def main() -> int:
   FIG_DIR.mkdir(exist_ok=True)
-  paths = [
+  paths: list[Path] = [
     plot_stopping_curves(),
     plot_jparc_e10_marker(),
     plot_transport_vs_linear(),
     plot_pstar_vs_bethe_emulsion(),
   ]
+  three_leg = plot_three_legs_emulsion()
+  if three_leg is not None:
+    paths.append(three_leg)
   print("Wrote:")
   for p in paths:
     print(f"  {p.relative_to(_REPO_ROOT)}")

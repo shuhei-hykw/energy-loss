@@ -1,0 +1,17 @@
+# Geant4 table-generation job: produce a stopping-power / CSDA-range
+# table for a single (particle, material) combination by running the
+# in-tree C++ generator. The Python side reads the resulting CSV with
+# RangeEnergyTable.from_nist_csv() — the same parser used for the
+# NIST PSTAR/ASTAR tables.
+#
+# Generated tables land in energy_loss/data/geant4/ keyed by a hash of
+# the (particle, material, energies, grid) tuple so repeat runs reuse
+# the previous CSV.
+
+geant4_table:
+  particle: proton
+  material: nuclear_emulsion
+  emin_mev: 0.01
+  emax_mev: 1000.0
+  n_points: 200
+  grid: log

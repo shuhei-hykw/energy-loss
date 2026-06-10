@@ -12,3 +12,8 @@ venv/
 .coverage
 htmlcov/
 .DS_Store
+
+# Geant4-generated tables are reproducible from the in-tree backend
+# and depend on the user's Geant4 install + request parameters; do
+# not commit them.
+energy_loss/data/geant4/*.csv
