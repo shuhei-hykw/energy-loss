@@ -59,6 +59,7 @@ AUTO_POLICY: dict[str, str] = {
 # so user code can request ``model="geant4"`` and the resolver maps it
 # to the bundled Geant4 backend automatically (similar to ``auto``).
 GEANT4_MODEL_NAME: str = "geant4_11_4_1"
+GEANT4_ATIMA_MODEL_NAME: str = "geant4_atima_11_4_1"
 
 
 @dataclass(frozen=True)
@@ -114,6 +115,8 @@ def resolve_model(particle: str, material: str, model: str) -> str:
       ) from exc
   elif model == "geant4":
     model = GEANT4_MODEL_NAME
+  elif model == "geant4_atima":
+    model = GEANT4_ATIMA_MODEL_NAME
   key = ModelKey(particle=particle_c, material=material_c, model=model)
   if key not in _REGISTRY:
     available = list_models(particle=particle_c, material=material_c)
@@ -184,6 +187,7 @@ register_table_factory(
 def _geant4_factory(
   particle: str, material: str, emin_mev: float = 0.001,
   emax_mev: float = 1.0e4, n_points: int = 200,
+  physics_list: str = "option4",
 ) -> Callable[[], RangeEnergyTable]:
   """Build a lazy factory that runs the Geant4 generator on first call."""
 
@@ -200,7 +204,7 @@ def _geant4_factory(
     spec = Geant4TableSpec(
       particle=particle, material=material,
       emin_mev=emin_mev, emax_mev=emax_mev,
-      n_points=n_points,
+      n_points=n_points, physics_list=physics_list,
     )
     csv_path = generate_geant4_table(spec)
     return RangeEnergyTable.from_nist_csv(csv_path)
@@ -230,3 +234,27 @@ for _particle in ("pion-", "pion+", "kaon-", "kaon+", "muon-", "muon+"):
     _particle, "Be", GEANT4_MODEL_NAME,
     _geant4_factory(_particle, "Be"),
   )
+
+# Geant4 ATIMA (G4AtimaEnergyLossModel) for the heavy charged particles
+# the model is designed for. Especially useful for emulsion range-energy
+# work at low energy where ATIMA, PSTAR and option4 differ noticeably.
+# Geant4's range table plateaus around 1 GeV in this model so emax is
+# capped there; ATIMA is intended for low/intermediate energies anyway.
+_ATIMA_EMAX_MEV = 1000.0
+for _particle in ("proton", "alpha", "deuteron", "triton"):
+  register_table_factory(
+    _particle, "nuclear_emulsion", GEANT4_ATIMA_MODEL_NAME,
+    _geant4_factory(
+      _particle, "nuclear_emulsion",
+      physics_list="atima", emax_mev=_ATIMA_EMAX_MEV,
+    ),
+  )
+for _material in ("aluminum", "carbon", "Be"):
+  for _particle in ("proton", "alpha"):
+    register_table_factory(
+      _particle, _material, GEANT4_ATIMA_MODEL_NAME,
+      _geant4_factory(
+        _particle, _material,
+        physics_list="atima", emax_mev=_ATIMA_EMAX_MEV,
+      ),
+    )

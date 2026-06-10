@@ -79,16 +79,18 @@ class Geant4TableSpec:
   emax_mev: float
   n_points: int
   grid: str = "log"            # "log" or "linear"
+  physics_list: str = "option4"  # "option4" (PSTAR-aligned) or "atima"
 
   def cache_filename(self) -> str:
     """Stable filename derived from the spec — runs are deterministic."""
     key = (
       f"{self.particle}|{self.material}|{self.emin_mev:.6g}|"
-      f"{self.emax_mev:.6g}|{self.n_points}|{self.grid}"
+      f"{self.emax_mev:.6g}|{self.n_points}|{self.grid}|"
+      f"{self.physics_list}"
     )
     digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:10]
     safe_mat = self.material.replace("/", "_")
-    return f"g4_{self.particle}_{safe_mat}_{digest}.csv"
+    return f"g4_{self.physics_list}_{self.particle}_{safe_mat}_{digest}.csv"
 
 
 def detect_geant4_executable(explicit: str | Path | None = None) -> Path:
@@ -151,6 +153,7 @@ def generate_geant4_table(
     "--emax", f"{spec.emax_mev}",
     "--n", str(int(spec.n_points)),
     "--grid", spec.grid,
+    "--physics", spec.physics_list,
     "--output", str(output_path),
   ]
   try:

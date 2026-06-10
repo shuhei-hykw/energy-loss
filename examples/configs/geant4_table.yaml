@@ -15,3 +15,11 @@ geant4_table:
   emax_mev: 1000.0
   n_points: 200
   grid: log
+  # physics_list: one of {option4, atima}.
+  #  - option4 (default): G4EmStandardPhysics_option4, aligned with
+  #    NIST PSTAR / ASTAR (ICRU 49 / 73).
+  #  - atima : G4AtimaEnergyLossModel + G4AtimaFluctuations, the
+  #    in-Geant4 ATIMA-based model. Designed for low-energy heavy
+  #    charged particles and differs from PSTAR / option4 noticeably
+  #    in the emulsion regime (see examples/plot_comparison.py).
+  physics_list: option4

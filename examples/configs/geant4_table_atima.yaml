@@ -1,0 +1,12 @@
+# Generate a Geant4 ATIMA-based range / stopping-power table for a
+# proton in nuclear emulsion. Useful as a low-energy reference next to
+# the option4 / NIST PSTAR tables.
+
+geant4_table:
+  particle: proton
+  material: nuclear_emulsion
+  emin_mev: 0.01
+  emax_mev: 1000.0
+  n_points: 200
+  grid: log
+  physics_list: atima

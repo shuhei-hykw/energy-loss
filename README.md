@@ -92,11 +92,30 @@ Two main use cases:
 - New built-in particles (`alpha`, `deuteron`, `triton`, `helion`)
   are routed to Geant4 names via the runner.
 
+### v0.5
+
+- **Geant4 ATIMA** as a second physics-list option in the same
+  backend. The C++ generator accepts `--physics {option4,atima}`;
+  the YAML schema gets a matching `physics_list:` field; the
+  registry exposes the result as a separate entry
+  `geant4_atima_11_4_1`, with `model="geant4_atima"` as the alias.
+- A unit bug in Geant4 11.4.1's `G4AtimaEnergyLossModel`
+  (`ComputeDEDXPerVolume` interprets a MeV/cm result as MeV/mm) is
+  compensated in the C++ wrapper. The remaining ~15–25% difference
+  vs PSTAR / option4 in the emulsion regime is real model physics
+  (ATIMA's `sezi_dedx_e` branch and the lack of density-effect
+  correction in `Bethek_dedx_e`).
+- The 4-model comparison shows up clearly in the new
+  `models_emulsion_low_energy.png` figure (NIST + Geant4 option4 +
+  Geant4 ATIMA + basic Bethe for proton & alpha in nuclear emulsion;
+  ratios at canonical track lengths annotated).
+
 ### Still to come
 
 - Setup YAML extension to drive `propagate_config` with a tabulated
   stopping-power model (Geant4-backed transport).
-- SRIM / ATIMA table readers as additional registry entries.
+- SRIM table readers; a true external ATIMA backend (GSI library
+  rather than the in-Geant4 model).
 - Adaptive step control in the integrator.
 - `src/energy_loss/` layout move suggested by `scope.md`.
 - Density-effect / shell / Barkas / Bloch corrections in the analytic

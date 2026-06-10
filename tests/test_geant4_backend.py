@@ -54,6 +54,23 @@ def test_spec_cache_filename_is_deterministic():
   assert s1.cache_filename() == s2.cache_filename()
 
 
+def test_spec_cache_filename_changes_with_physics_list():
+  s_o4 = Geant4TableSpec(
+    particle="proton", material="nuclear_emulsion",
+    emin_mev=0.01, emax_mev=100.0, n_points=20,
+    physics_list="option4",
+  )
+  s_at = Geant4TableSpec(
+    particle="proton", material="nuclear_emulsion",
+    emin_mev=0.01, emax_mev=100.0, n_points=20,
+    physics_list="atima",
+  )
+  assert s_o4.cache_filename() != s_at.cache_filename()
+  # Filename carries the physics-list label for human readability.
+  assert "atima" in s_at.cache_filename()
+  assert "option4" in s_o4.cache_filename()
+
+
 def test_spec_changes_with_n_points():
   s1 = Geant4TableSpec(
     particle="proton", material="nuclear_emulsion",
@@ -110,6 +127,25 @@ def test_geant4_keyword_resolves_to_version_specific_name():
   assert resolve_model("proton", "nuclear_emulsion", "geant4") == "geant4_11_4_1"
 
 
+def test_geant4_atima_alias_resolves():
+  from energy_loss.models.registry import resolve_model
+
+  assert (
+    resolve_model("proton", "nuclear_emulsion", "geant4_atima")
+    == "geant4_atima_11_4_1"
+  )
+  assert (
+    resolve_model("alpha", "nuclear_emulsion", "geant4_atima")
+    == "geant4_atima_11_4_1"
+  )
+
+
+def test_registry_lists_both_geant4_models_for_emulsion():
+  models = list_models(particle="proton", material="nuclear_emulsion")
+  assert "geant4_11_4_1" in models
+  assert "geant4_atima_11_4_1" in models
+
+
 # -------- integration: runs the actual generator ---------------------------
 
 @requires_geant4
@@ -157,6 +193,27 @@ def test_geant4_alpha_agrees_with_astar_within_a_few_percent():
 
 
 # -------- cache behaviour --------------------------------------------------
+
+@requires_geant4
+def test_atima_table_has_atima_metadata():
+  t = load_table("proton", "nuclear_emulsion", "geant4_atima")
+  assert "atima" in t.metadata.source.lower()
+
+
+@requires_geant4
+def test_atima_disagrees_with_pstar_at_low_energy_emulsion():
+  # The whole point of registering ATIMA is to see a difference vs
+  # PSTAR / option4 in the emulsion regime. At 10 um proton range
+  # PSTAR / option4 agree to <1% and ATIMA differs by >10%.
+  out = compare_energy_from_range(
+    "proton", "nuclear_emulsion", range_um=10.0,
+    models=["nist_pstar", "geant4", "geant4_atima"],
+  )
+  ratio_o4 = abs(out["nist_pstar"] - out["geant4_11_4_1"]) / out["nist_pstar"]
+  ratio_at = abs(out["nist_pstar"] - out["geant4_atima_11_4_1"]) / out["nist_pstar"]
+  assert ratio_o4 < 0.02
+  assert ratio_at > 0.10
+
 
 @requires_geant4
 def test_cached_csv_is_reused(tmp_path: Path):

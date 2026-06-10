@@ -44,8 +44,12 @@ def main(argv: list[str]) -> int:
     emax_mev=float(section["emax_mev"]),
     n_points=int(section["n_points"]),
     grid=str(section.get("grid", "log")),
+    physics_list=str(section.get("physics_list", "option4")),
   )
-  print(f"Running Geant4 generator for {spec.particle} in {spec.material}")
+  print(
+    f"Running Geant4 generator for {spec.particle} in {spec.material} "
+    f"(physics={spec.physics_list})"
+  )
   print(
     f"  energy grid : {spec.n_points} points ({spec.grid}) "
     f"from {spec.emin_mev} to {spec.emax_mev} MeV"

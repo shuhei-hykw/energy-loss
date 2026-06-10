@@ -35,10 +35,25 @@
 #include <string>
 #include <vector>
 
+#include "G4Alpha.hh"
+#include "G4AtimaEnergyLossModel.hh"
+#include "G4AtimaFluctuations.hh"
 #include "G4Box.hh"
+#include "G4Deuteron.hh"
+#include "G4Electron.hh"
 #include "G4EmCalculator.hh"
 #include "G4EmParameters.hh"
 #include "G4EmStandardPhysics_option4.hh"
+#include "G4Gamma.hh"
+#include "G4GenericIon.hh"
+#include "G4Geantino.hh"
+#include "G4He3.hh"
+#include "G4PhysicsListHelper.hh"
+#include "G4Positron.hh"
+#include "G4Proton.hh"
+#include "G4Triton.hh"
+#include "G4hIonisation.hh"
+#include "G4ionIonisation.hh"
 #include "G4Element.hh"
 #include "G4LogicalVolume.hh"
 #include "G4Material.hh"
@@ -62,6 +77,62 @@ class EmOption4PhysicsList : public G4VModularPhysicsList {
 public:
   EmOption4PhysicsList() {
     RegisterPhysics(new G4EmStandardPhysics_option4());
+  }
+};
+
+
+// Standalone physics list that uses the ATIMA energy-loss model for the
+// heavy charged particles ATIMA is designed for (proton, alpha, light
+// ions, generic ions). Only ionisation processes are registered — that
+// is all G4EmCalculator needs to populate dE/dx and range tables. Other
+// processes (multiple scattering, bremsstrahlung) do not contribute to
+// stopping power tables and are intentionally left off so the
+// resulting CSV reflects ATIMA purely.
+class EmAtimaPhysicsList : public G4VModularPhysicsList {
+public:
+  EmAtimaPhysicsList() = default;
+
+  void ConstructParticle() override {
+    G4Geantino::Geantino();
+    G4Gamma::Gamma();
+    G4Electron::Electron();
+    G4Positron::Positron();
+    G4Proton::Proton();
+    G4Alpha::Alpha();
+    G4Deuteron::Deuteron();
+    G4Triton::Triton();
+    G4He3::He3();
+    G4GenericIon::GenericIon();
+  }
+
+  void ConstructProcess() override {
+    AddTransportation();
+    auto* helper = G4PhysicsListHelper::GetPhysicsListHelper();
+
+    // Light charged hadrons (proton, deuteron, triton): G4hIonisation
+    // with ATIMA model + ATIMA fluctuations.
+    for (auto* particle : {
+      static_cast<G4ParticleDefinition*>(G4Proton::Proton()),
+      static_cast<G4ParticleDefinition*>(G4Deuteron::Deuteron()),
+      static_cast<G4ParticleDefinition*>(G4Triton::Triton()),
+    }) {
+      auto* ioni = new G4hIonisation();
+      ioni->SetEmModel(new G4AtimaEnergyLossModel());
+      ioni->SetFluctModel(new G4AtimaFluctuations());
+      helper->RegisterProcess(ioni, particle);
+    }
+
+    // Nuclei (alpha, He-3, generic ion): G4ionIonisation with ATIMA.
+    for (auto* particle : {
+      static_cast<G4ParticleDefinition*>(G4Alpha::Alpha()),
+      static_cast<G4ParticleDefinition*>(G4He3::He3()),
+      static_cast<G4ParticleDefinition*>(G4GenericIon::GenericIon()),
+    }) {
+      auto* ioni = new G4ionIonisation();
+      ioni->SetEmModel(new G4AtimaEnergyLossModel());
+      ioni->SetFluctModel(new G4AtimaFluctuations());
+      helper->RegisterProcess(ioni, particle);
+    }
   }
 };
 
@@ -102,6 +173,10 @@ struct Args {
   int n_points = 100;
   std::string grid = "log";
   std::string output = "g4_table.csv";
+  // "option4" (default) for the EM Standard option4 line that PSTAR /
+  // ASTAR are aligned with; "atima" for the in-Geant4 ATIMA model that
+  // tends to differ from option4 at low energy.
+  std::string physics = "option4";
 };
 
 Args parse_args(int argc, char** argv) {
@@ -122,10 +197,15 @@ Args parse_args(int argc, char** argv) {
     else if (key == "--n") a.n_points = std::stoi(need("--n"));
     else if (key == "--grid") a.grid = need("--grid");
     else if (key == "--output") a.output = need("--output");
+    else if (key == "--physics") a.physics = need("--physics");
     else {
       std::cerr << "unknown argument: " << key << "\n";
       std::exit(2);
     }
+  }
+  if (a.physics != "option4" && a.physics != "atima") {
+    std::cerr << "--physics must be 'option4' or 'atima'\n";
+    std::exit(2);
   }
   if (a.n_points < 2) {
     std::cerr << "--n must be >= 2\n";
@@ -211,7 +291,11 @@ int main(int argc, char** argv) {
 
   auto* det = new Detector(args.material);
   runManager->SetUserInitialization(det);
-  runManager->SetUserInitialization(new EmOption4PhysicsList());
+  if (args.physics == "atima") {
+    runManager->SetUserInitialization(new EmAtimaPhysicsList());
+  } else {
+    runManager->SetUserInitialization(new EmOption4PhysicsList());
+  }
   runManager->Initialize();
   // BeamOn(0) forces the physics tables to be built (cross sections,
   // dE/dx, range) for the registered particles in the registered
@@ -243,11 +327,17 @@ int main(int argc, char** argv) {
   const double i_ev = mat->GetIonisation()->GetMeanExcitationEnergy() / eV;
 
   const std::string g4ver = clean_geant4_version();
+  const std::string physics_label =
+    (args.physics == "atima")
+      ? "Geant4 ATIMA (G4AtimaEnergyLossModel + G4AtimaFluctuations)"
+      : "G4EmStandardPhysics_option4";
   out << "# Geant4 stopping-power / CSDA-range table\n"
       << "# Particle: " << args.particle << "\n"
-      << "# Source:   geant4://" << g4ver << "\n"
+      << "# Source:   geant4://" << g4ver << "/" << args.physics << "\n"
       << "# Geant4 version: " << g4ver << "\n"
-      << "# Underlying physics: G4EmStandardPhysics_option4\n"
+      << "# Physics list: " << args.physics << " (" << physics_label
+      << ")\n"
+      << "# Underlying physics: " << physics_label << "\n"
       << "# Density [g/cm^3]: " << std::fixed << std::setprecision(5)
       << rho_g_per_cm3 << "\n"
       << "# Mean excitation energy I [eV]: " << std::setprecision(3)
@@ -263,19 +353,25 @@ int main(int argc, char** argv) {
          "S_total_MeV_cm2_per_g,R_csda_g_per_cm2,R_proj_g_per_cm2,"
          "detour_factor\n";
 
+  // Geant4 11.4.1's G4AtimaEnergyLossModel::ComputeDEDXPerVolume returns
+  // its internal mass stopping power multiplied by density in g/cm^3,
+  // i.e. linear stopping power in MeV/cm. The framework treats that as
+  // Geant4 internal energy/length units (MeV/mm), so its numeric value
+  // ends up 10x too high. We compensate at the consumer side: scale
+  // stopping power down by 10 and CSDA range up by 10. Above ~10 MeV
+  // this aligns the ATIMA option with PSTAR/option4 within a percent
+  // or two; the residual differences at low energy are real physics
+  // (ATIMA's sezi_dedx_e branch vs Bethe-Bloch).
+  const double atima_fix_dEdx = (args.physics == "atima") ? 0.1 : 1.0;
+  const double atima_fix_range = (args.physics == "atima") ? 10.0 : 1.0;
+
   out << std::scientific << std::setprecision(6);
   for (double t_mev : ts_mev) {
     const double T = t_mev * MeV;
-    // Stopping powers from G4EmCalculator: returns MeV/mm internally.
-    // Convert by Geant4 unit system: divide by (MeV/(g/cm2)) i.e.
-    //   S [MeV cm^2/g] = S_g4 / rho_g4  ; G4EmCalc has Compute*DEDX(rho-free)
-    // Easier: use ComputeElectronicDEDX which returns MeV cm^2 / g when
-    //   we divide by density. But G4EmCalculator returns G4 units, so
-    //   convert via /(MeV/mm) and *( mm / cm) /(rho [g/cm3]).
     const double s_elec_g4 =
-      calc.ComputeElectronicDEDX(T, part, mat);
+      calc.ComputeElectronicDEDX(T, part, mat) * atima_fix_dEdx;
     const double s_nuc_g4 =
-      calc.ComputeNuclearDEDX(T, part, mat);
+      calc.ComputeNuclearDEDX(T, part, mat) * atima_fix_dEdx;
     // GetCSDARange requires G4EmParameters::SetBuildCSDARange(true)
     // *and* a particle/process that registers a CSDA table — not all
     // combinations build one. Fall back to GetRange (energy-loss range
@@ -284,6 +380,7 @@ int main(int argc, char** argv) {
     if (r_csda_g4 <= 0.0) {
       r_csda_g4 = calc.GetRange(T, part, mat);
     }
+    r_csda_g4 *= atima_fix_range;
 
     // G4 stopping power is energy per length. Convert to MeV cm^2 / g
     // by dividing by density. Geant4 internal unit for energy/length is
