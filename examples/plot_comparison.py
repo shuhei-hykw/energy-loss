@@ -205,18 +205,31 @@ def plot_emulsion_comparison() -> Path:
 
 
 def plot_emulsion_four_models() -> Path:
-  """4-model emulsion comparison emphasising the ATIMA differences.
+  """4-model emulsion comparison with shaded recommended-energy bands.
 
   Solid: NIST table (PSTAR/ASTAR).
   Dotted: Geant4 option4.
-  Dash-dot: Geant4 ATIMA.
+  Dash-dot: Geant4 ATIMA (drawn inside its recommended band only).
   Dashed: basic Bethe CSDA (this library).
 
   Annotations report the ratio of each model to NIST at a couple of
-  emulsion-relevant track lengths.
+  emulsion-relevant track lengths. The ATIMA band [2, 1000] MeV is
+  shaded; outside it the ATIMA curve is suppressed because the model
+  is not advertised there.
   """
+  from energy_loss.models.registry import get_model_entry
+
   fig, ax = plt.subplots(figsize=(8.5, 6.0))
   rho_emul = 3.815
+
+  # Shade ATIMA's recommended range once (particle-independent here).
+  atima_entry = get_model_entry("proton", "nuclear_emulsion", "geant4_atima")
+  ax.axvspan(
+    atima_entry.valid_min_mev, atima_entry.valid_max_mev,
+    color="0.85", alpha=0.4, zorder=0,
+    label=f"ATIMA recommended range "
+          f"[{atima_entry.valid_min_mev:g}, {atima_entry.valid_max_mev:g}] MeV",
+  )
 
   for particle, color, ref_um in [
     ("proton", "C0", 10.0),
@@ -238,10 +251,16 @@ def plot_emulsion_four_models() -> Path:
       ":", color=color, linewidth=1.6,
       label=f"{particle} Geant4 option4",
     )
+    # Clip ATIMA to its recommended band.
+    in_band = (
+      (g4at.kinetic_energy_mev >= atima_entry.valid_min_mev)
+      & (g4at.kinetic_energy_mev <= atima_entry.valid_max_mev)
+    )
     ax.loglog(
-      g4at.kinetic_energy_mev, g4at.range_csda_g_per_cm2 / rho_emul * 1e4,
+      g4at.kinetic_energy_mev[in_band],
+      g4at.range_csda_g_per_cm2[in_band] / rho_emul * 1e4,
       "-.", color=color, linewidth=1.6,
-      label=f"{particle} Geant4 ATIMA",
+      label=f"{particle} Geant4 ATIMA (in-band)",
     )
     r_bethe = _bethe_csda_grammage(particle, "nuclear_emulsion", bethe_t)
     mask = np.isfinite(r_bethe)
@@ -251,17 +270,23 @@ def plot_emulsion_four_models() -> Path:
       label=f"{particle} basic Bethe CSDA",
     )
 
-    # Ratios at a representative track length.
+    # Ratios at a representative track length, flagging ATIMA when
+    # the resolved energy falls outside the recommended band.
     ref_g = ref_um * 1e-4 * rho_emul
     try:
       t_nist = nist.energy_from_range(ref_g)
       t_o4 = g4o4.energy_from_range(ref_g)
       t_at = g4at.energy_from_range(ref_g)
+      atima_in = atima_entry.covers(t_at)
+      atima_label = (
+        f"ATIMA={t_at:.3f} ({100*t_at/t_nist:.1f}%)"
+        + ("" if atima_in else "  [out of band]")
+      )
       ax.text(
         0.62, 0.05 + (0.0 if particle == "proton" else 0.12),
         f"{particle} @ {ref_um} um (T from R):  "
         f"NIST={t_nist:.3f} MeV,  option4={t_o4:.3f} ({100*t_o4/t_nist:.1f}%),  "
-        f"ATIMA={t_at:.3f} ({100*t_at/t_nist:.1f}%)",
+        + atima_label,
         transform=ax.transAxes, fontsize=8.5, ha="left", va="bottom",
         color=color,
         bbox={"boxstyle": "round,pad=0.3", "fc": "white",
@@ -274,7 +299,7 @@ def plot_emulsion_four_models() -> Path:
   ax.set_ylabel(r"range in nuclear emulsion [$\mu$m]")
   ax.set_title(
     "Nuclear emulsion range-energy: NIST / Geant4 option4 / Geant4 ATIMA "
-    "/ basic Bethe"
+    "/ basic Bethe (with ATIMA recommended band shaded)"
   )
   ax.grid(True, which="both", linestyle=":", alpha=0.6)
   ax.legend(fontsize=8, loc="upper left", ncol=2)

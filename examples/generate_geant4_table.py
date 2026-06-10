@@ -23,6 +23,38 @@ from energy_loss.backends import (  # noqa: E402
   Geant4TableSpec,
   generate_geant4_table,
 )
+from energy_loss.models.registry import (  # noqa: E402
+  _REGISTRY,
+  GEANT4_ATIMA_MODEL_NAME,
+  GEANT4_MODEL_NAME,
+  ModelKey,
+  _canonical_material,
+  _canonical_particle,
+)
+
+
+def _validity_check(spec: Geant4TableSpec) -> None:
+  """Warn if the requested energy span sticks out of the model's band."""
+  model = (
+    GEANT4_ATIMA_MODEL_NAME if spec.physics_list == "atima"
+    else GEANT4_MODEL_NAME
+  )
+  key = ModelKey(
+    particle=_canonical_particle(spec.particle),
+    material=_canonical_material(spec.material),
+    model=model,
+  )
+  entry = _REGISTRY.get(key)
+  if entry is None:
+    return
+  lo, hi = entry.valid_min_mev, entry.valid_max_mev
+  if spec.emin_mev < lo or spec.emax_mev > hi:
+    print(
+      f"  NOTE: requested [{spec.emin_mev}, {spec.emax_mev}] MeV "
+      f"extends beyond {model}'s recommended band [{lo:g}, {hi:g}] MeV. "
+      f"{entry.note}",
+      file=sys.stderr,
+    )
 
 
 def main(argv: list[str]) -> int:
@@ -46,6 +78,10 @@ def main(argv: list[str]) -> int:
     grid=str(section.get("grid", "log")),
     physics_list=str(section.get("physics_list", "option4")),
   )
+
+  # Warn if the requested energy span pokes outside the physics-list's
+  # recommended band (per the model registry advisory).
+  _validity_check(spec)
   print(
     f"Running Geant4 generator for {spec.particle} in {spec.material} "
     f"(physics={spec.physics_list})"

@@ -20,8 +20,14 @@ from energy_loss.units import length_to_cm
 def list_bundled_emulsion_tables() -> list[str]:
   """Particles for which a bundled NIST table exists for nuclear_emulsion."""
   out: set[str] = set()
-  for p in AUTO_POLICY:
-    if AUTO_POLICY[p] in list_models(particle=p, material="nuclear_emulsion"):
+  for p, preferences in AUTO_POLICY.items():
+    available = list_models(particle=p, material="nuclear_emulsion")
+    # The first NIST-tagged preference that is actually registered.
+    nist_match = next(
+      (m for m in preferences if m.startswith("nist_") and m in available),
+      None,
+    )
+    if nist_match is not None:
       out.add(p)
   return sorted(out)
 

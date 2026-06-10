@@ -110,6 +110,32 @@ Two main use cases:
   Geant4 ATIMA + basic Bethe for proton & alpha in nuclear emulsion;
   ratios at canonical track lengths annotated).
 
+### v0.6
+
+- **Model applicability ranges**. Each registry entry now carries
+  `valid_min_mev` / `valid_max_mev` (plus a short note) advertising
+  the band in which the underlying model is considered reliable —
+  e.g. NIST PSTAR `[0.001, 10000] MeV`, NIST ASTAR `[0.001, 1000]
+  MeV`, Geant4 ATIMA `[2, 1000] MeV` (model floor + range-table
+  ceiling).
+- **Energy-aware `auto`**. `range_from_energy(..., model="auto")`
+  knows the kinetic energy at resolve time and walks the
+  per-particle preference list (`[nist_pstar, geant4, geant4_atima]`
+  for protons; `[nist_astar, ...]` for alphas; etc.), picking the
+  first preference that covers it. `list_models(..., valid_at_mev=T)`
+  exposes the same filter directly.
+- **Out-of-range warnings**. `energy_from_range` /
+  `range_from_energy` still return the requested value when the
+  user picks an explicit model that doesn't cover the resulting
+  energy, but emit a `UserWarning` reminding them of the band and
+  reason. `compare_*` gain a `skip_out_of_range` keyword that drops
+  the offending models from the report instead.
+- **Plots & CLI follow suit**. `models_emulsion_low_energy.png`
+  shades ATIMA's `[2, 1000] MeV` recommended band, clips the ATIMA
+  curve to that band, and tags out-of-band annotation values.
+  `generate_geant4_table.py` prints a stderr note if the YAML asks
+  for an energy span that pokes outside the band.
+
 ### Still to come
 
 - Setup YAML extension to drive `propagate_config` with a tabulated
@@ -275,6 +301,32 @@ Other inputs / output units are first-class:
 energy_from_range("proton", "nuclear_emulsion",
                   range_value=10e-3, range_unit="mm",
                   energy_unit="keV")
+```
+
+Each model declares the kinetic-energy band it is considered reliable
+in; `model="auto"` for `range_from_energy` walks the preferred-order
+list and skips any candidate whose range doesn't cover the requested
+energy:
+
+```python
+from energy_loss.models.registry import get_model_entry, list_models
+
+list_models(particle="proton", material="nuclear_emulsion",
+            valid_at_mev=0.5)
+# ['geant4_11_4_1', 'nist_pstar']    # ATIMA dropped (range starts at 2 MeV)
+
+entry = get_model_entry("proton", "nuclear_emulsion", "geant4_atima")
+print(entry.valid_min_mev, entry.valid_max_mev, entry.note)
+# 2.0 1000.0 "Geant4 G4AtimaEnergyLossModel; designed for heavy ..."
+
+# Out-of-range with an explicit model -> UserWarning, but still returns:
+energy_from_range("proton", "nuclear_emulsion", range_um=5.0,
+                  model="geant4_atima")
+# UserWarning: Model 'geant4_atima_11_4_1' used outside its recommended ...
+
+compare_energy_from_range("proton", "nuclear_emulsion",
+                          range_um=5.0, skip_out_of_range=True)
+# {'unit': 'MeV', 'nist_pstar': 0.480, 'geant4_11_4_1': 0.477}
 ```
 
 Bundled tables live at `energy_loss/data/nist/*.csv` with full
